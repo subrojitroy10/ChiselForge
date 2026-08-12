@@ -1,0 +1,5 @@
+# One proxy per line, format: host:port:username:password
+# Copy this file to proxies.txt (gitignored) and fill in real values.
+# Proxies are OPTIONAL — see core/proxy-pool.js and README.md.
+203.0.113.10:6000:exampleuser:examplepass
+203.0.113.11:6001:exampleuser:examplepass

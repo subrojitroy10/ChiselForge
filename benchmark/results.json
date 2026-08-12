@@ -1,0 +1,51 @@
+{
+  "generatedAt": "2026-08-12T22:52:45.966Z",
+  "model": "nvidia/llama-3.3-nemotron-super-49b-v1",
+  "totalCases": 3,
+  "successCount": 3,
+  "llmUsedCount": 2,
+  "tierBreakdown": {
+    "hydration": 1,
+    "json-ld": 1,
+    "text": 1
+  },
+  "avgLatencyMs": 15134,
+  "results": [
+    {
+      "name": "zomato-reviews (hydration tier)",
+      "url": "https://www.zomato.com/mumbai/british-brewing-company-lower-parel/reviews",
+      "success": true,
+      "itemCount": 5,
+      "strategy": "hydration",
+      "llmUsed": true,
+      "confidence": 0.75,
+      "validationValid": true,
+      "latencyMs": 42996,
+      "error": null
+    },
+    {
+      "name": "zomato-restaurant-metadata (json-ld tier)",
+      "url": "https://www.zomato.com/mumbai/british-brewing-company-lower-parel/reviews",
+      "success": true,
+      "itemCount": 1,
+      "strategy": "json-ld",
+      "llmUsed": false,
+      "confidence": 0.95,
+      "validationValid": true,
+      "latencyMs": 1085,
+      "error": null
+    },
+    {
+      "name": "example.com (plain text, no structure — text tier)",
+      "url": "https://example.com/",
+      "success": true,
+      "itemCount": 1,
+      "strategy": "text",
+      "llmUsed": true,
+      "confidence": 0.5,
+      "validationValid": true,
+      "latencyMs": 1322,
+      "error": null
+    }
+  ]
+}

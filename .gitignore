@@ -1,0 +1,10 @@
+node_modules/
+proxies.txt
+output/
+state/
+logs/
+*.log
+.chrome-debug-profile/
+.env
+.env.local
+api keys.txt

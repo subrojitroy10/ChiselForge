@@ -1,0 +1,30 @@
+{
+  "name": "scraper-harness",
+  "version": "0.1.0",
+  "description": "Extract structured data from webpages without writing a scraper. Deterministic extraction first (JSON-LD, hydration state) — LLM only when necessary. Plus a resumable multi-worker job-running engine underneath for serious scraping infrastructure.",
+  "main": "index.js",
+  "bin": {
+    "scraper-harness": "./cli.js"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "scraper",
+    "web-scraping",
+    "extraction",
+    "structured-data",
+    "json-ld",
+    "llm",
+    "playwright",
+    "crawler"
+  ],
+  "optionalDependencies": {
+    "playwright": "^1.45.0",
+    "undici": "^6.19.0"
+  }
+}
