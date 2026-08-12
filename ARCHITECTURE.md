@@ -83,6 +83,51 @@ If a second classification strategy, a second confidence model, or
 adapter-specific validation shows up, that's when these become real
 interfaces — not before.
 
+## Language choices
+
+**Runtime: Node.js, staying Node.js.** Playwright's ecosystem, native
+`fetch`, npm distribution, and the `npx scraper-harness` zero-install
+experience all depend on it. Not up for debate.
+
+**JavaScript vs. TypeScript — currently JavaScript, this is a real open
+decision, not a settled one.** The decision rule this project uses when
+evaluating a new component:
+
+1. Does this belong to browser/runtime/package infrastructure? → Node.js,
+   and TypeScript is genuinely justified for public API surfaces (adapter
+   interfaces, schema contracts, worker orchestration) — better DX, real
+   type safety on contracts other code depends on.
+2. Does this involve actual ML/statistical work (see below)? → Python is
+   justified there, not here.
+3. Is Python being proposed only because "we might need ML eventually"? →
+   Don't add it yet — no concrete Python component exists in this repo, and
+   none should until there's a specific ML/confidence-modeling task that
+   needs it (see Roadmap).
+4. Is JavaScript being used here only because that's what the original
+   production pipelines happened to be written in? → Partially yes, and
+   that's the honest answer, not a justification. The current `.js` files
+   were a pragmatic choice to ship a tested, working v0.1 without also
+   taking on a full-codebase language migration's regression risk in the
+   same pass as the rest of the v0.1 hardening work (CLI, validation,
+   confidence scoring, benchmark, docs, licensing). **A converted-to-TypeScript
+   version of this codebase is a legitimate, still-open next step** —
+   deliberately not done silently in this pass, since a full rewrite of
+   ~20 already-tested files carries real regression risk and wasn't itself
+   one of the bounded, verifiable changes this hardening pass made. Treat
+   this as a tracked decision requiring an explicit choice (full migration
+   vs. incremental `.d.ts` type declarations layered on the existing `.js`
+   vs. deferring further), not a default either way.
+
+**Python — not present in this repo, and shouldn't be added speculatively.**
+There is no ML/statistical component here yet (`extraction/confidence.js` is
+a fixed heuristic, explicitly documented as such — see its own file
+comments). When the roadmap's "confidence from real outcomes" or "learned
+strategy selection" items become concrete work, evaluate Python then, for
+that component specifically — not as a wholesale architecture decision made
+ahead of any actual need. Do not stand up a Node service + Python service +
+message broker + database in anticipation of ML that doesn't exist yet —
+that adds real operational complexity for no current user value.
+
 ## Roadmap (not built yet — don't assume any of this exists)
 
 The long-term direction, in order of how far off each is:

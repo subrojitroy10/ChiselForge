@@ -22,9 +22,14 @@ when a block actually matches:
 autoExtract(url, schema, { jsonLdType: 'Review' })
 ```
 
-Without it, tier 1 is best-effort and returns whatever JSON-LD exists,
-relevant or not — only skip the hint if you're inspecting the page yourself
-and know what's there.
+Without `jsonLdType`, tier 1 falls back to a field-overlap heuristic
+(`findRelevantBlocks`) rather than accepting any JSON-LD present: it checks
+whether a block's own keys plausibly match your schema's field names, and
+returns only the single best-matching block (or blocks tied for best) —
+never "everything above a loose floor," since that let a schema sharing just
+one common field name (e.g. `name`) with an unrelated `WebSite` block get
+accepted incorrectly, found via testing. This is a heuristic, not an exact
+match — `jsonLdType` is always more precise when you know it.
 
 ## Tier 2 — Hydration state (`extraction/classify.js` + `extraction/llm.js`)
 

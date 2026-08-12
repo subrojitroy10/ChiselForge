@@ -23,11 +23,11 @@ Loading https://example.com/product/123 ...
 That output above is real — captured from an actual run against a live page,
 not a mockup. See [`QUICKSTART.md`](QUICKSTART.md) for the exact command.
 
-It starts with **deterministic extraction** (structured data already on the
-page) and only escalates to an LLM when the page genuinely doesn't have
-structured data to read. You can see and control exactly which tier ran —
-`extraction.strategy` and `extraction.llmUsed` are in every result, and
-`--verbose` prints the decision trail as it happens.
+It starts with structured data already exposed by the page and only uses an
+LLM when deterministic extraction alone isn't sufficient. You can see and
+control exactly which tier ran — `extraction.strategy` and
+`extraction.llmUsed` are in every result, and `--verbose` prints the decision
+trail as it happens.
 
 ## The core idea
 
@@ -39,27 +39,33 @@ URL + schema
     ↓
 Rendering classification        (does this page even need a browser?)
     ↓
-Tier 1 — JSON-LD / schema.org    (free, instant, exact — if present and relevant)
+Tier 1 — JSON-LD / schema.org    (deterministic — free, instant, exact, if present and relevant)
     ↓
-Tier 2 — hydration-state         (structured app state, LLM maps it to your schema)
+Tier 2 — hydration-state         (structured app state — an LLM maps it to your schema)
     ↓
-Tier 3 — raw text                (last resort — no structure found at all)
+Tier 3 — raw text                (last resort — no structure found at all, LLM interprets cold)
     ↓
 Schema validation
     ↓
 Structured output
 ```
 
-This is not "another Playwright wrapper" and not "another LLM scraper." Most
-tools reach for an LLM by default because it's the easy path; this one tries
-hard not to, and tells you when it had to.
+This is not "another Playwright wrapper" and not "another LLM scraper."
+LLM-first extraction is convenient, but can be unnecessarily expensive and
+slow when the page already exposes structured data — this project tries the
+deterministic path first and tells you when it had to escalate.
 
-**Honest limitation:** tiers 1 and 2 are deterministic and reliable. Tier 3
-(no JSON-LD, no recognized hydration format) is a genuine last resort —
-non-deterministic, and the point where "extract anything" claims stop being
-fully honest. See [`EXTRACTION_STRATEGIES.md`](EXTRACTION_STRATEGIES.md) for
-the specifics, and [`BENCHMARKS.md`](BENCHMARKS.md) for measured numbers on
-how often each tier actually fires — not marketing estimates.
+**Be precise about which tiers are actually deterministic.** Only tier 1
+(JSON-LD) is deterministic — no LLM involved, same input always produces the
+same output. Tiers 2 and 3 both use an LLM to map data onto your schema
+(tier 2 gets clean structured JSON as input, which is meaningfully more
+reliable than tier 3's raw text — see `EXTRACTION_STRATEGIES.md` and
+`BENCHMARKS.md`'s measured latency difference — but "more reliable than
+tier 3" is not the same as "deterministic"). `extraction.llmUsed` in every
+result tells you plainly whether an LLM was involved, rather than leaving it
+implied. See [`EXTRACTION_STRATEGIES.md`](EXTRACTION_STRATEGIES.md) for the
+specifics, and [`BENCHMARKS.md`](BENCHMARKS.md) for measured numbers on how
+often each tier actually fires — not marketing estimates.
 
 ## Install
 
@@ -68,8 +74,8 @@ npm install scraper-harness
 ```
 
 `playwright` and `undici` are optional — only needed for browser-rendered
-pages or HTTP proxy support, respectively. The deterministic tiers and the
-CLI's common case need neither.
+pages or HTTP proxy support, respectively. The JSON-LD tier and the CLI's
+common case need neither.
 
 ## Three ways to use this
 
@@ -104,20 +110,37 @@ result.extraction.llmUsed;      // boolean
 result.extraction.confidence;   // 0-1 heuristic, see ARCHITECTURE.md
 ```
 
-### 3. Engineering API — the pieces underneath
+### 3. Engineering API — the infrastructure underneath
 
-Everything `autoExtract` composes is independently usable: a resumable
-multi-worker job queue, checkpointing, rate limiting, proxy rotation,
-structured logging, browser lifecycle management (fresh-launch pool with
-recycling, or CDP-attach to a real local Chrome), and each extraction tier on
-its own. See [`ARCHITECTURE.md`](ARCHITECTURE.md).
+`autoExtract()` is the high-level interface. It's built on a modular browser
+and extraction runtime that can also be used directly. The underlying
+infrastructure provides:
+
+- Multi-worker browser execution
+- Job queues with resumable checkpointing
+- Browser/context lifecycle management, context recycling, restart policies
+- Retry and timeout controls
+- Rate limiting and proxy pools
+- Stagnation-aware lazy-load/infinite-scroll extraction
+- Pluggable extraction strategies
+- Site-specific adapters (in the sibling `scraper-adapters` package)
+- Schema validation and normalized output
+- Provider-agnostic LLM integration
+- Structured extraction logging
+
+Use the high-level API when you just need data. Compose the underlying
+primitives directly when building a larger scraping or browser-automation
+system — this infrastructure was generalized from production pipelines that
+had already handled real scraping workloads (10 concurrent workers across
+~11,000 venues with zero blocks; a separate HTTP-based pipeline across 634
+venues with proxy rotation) before this repo existed. See
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ```js
 const { runWorkerPool, RateLimiter, ProxyPool, JobQueue } = require('scraper-harness');
 ```
 
-This is the layer a serious scraping project builds on — not something a
-`autoExtract()` call hides forever, just something you don't need on day one.
+`autoExtract()` is the front door. This is the building.
 
 ## Real adapters, not just a generic engine
 
@@ -140,13 +163,11 @@ against real, difficult, dynamic sites — not just the happy path.
 ## What this is not
 
 Not a hosted service, not a SaaS, no billing, no accounts, no dashboard. It's
-a local/self-hostable library and CLI. It doesn't try to out-market Apify,
-out-feature Crawlee, or out-scale Firecrawl — it exists because "don't call
-an LLM unless you actually have to" was worth building properly, and because
-the infrastructure underneath it (worker pools, checkpointing, browser
-lifecycle management) was already proven at real production scale before
-this repo existed.
+a local/self-hostable library and CLI, and it doesn't try to define itself
+against other tools — it stands on its own thesis: deterministic extraction
+first, an LLM only when necessary, and production-derived infrastructure
+underneath rather than a thin demo layer.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+Apache License 2.0 — see [`LICENSE`](LICENSE).

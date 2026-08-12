@@ -42,4 +42,55 @@ function findByType(jsonLdBlocks, type) {
     });
 }
 
-module.exports = { extractJsonLdBlocks, findByType };
+// Best-effort relevance heuristic for when the caller doesn't know (or
+// didn't supply) the schema.org @type they want — see auto.js. Not ML, just
+// field-name overlap: "does this JSON-LD block's own keys look like they'd
+// answer this schema, or is it clearly a different kind of block (e.g.
+// WebSite/BreadcrumbList) that happens to share the page with what you
+// actually want." A real @type match (findByType) is always more precise
+// than this when you have one — prefer that when you know it.
+function fieldOverlapRatio(schema, block) {
+    const schemaFields = Object.keys(schema || {}).map(f => f.toLowerCase());
+    const blockFields = Object.keys(block || {})
+        .filter(k => !k.startsWith('@'))
+        .map(k => k.toLowerCase());
+
+    if (!schemaFields.length || !blockFields.length) return 0;
+
+    let matches = 0;
+    for (const schemaField of schemaFields) {
+        if (blockFields.some(blockField =>
+            blockField === schemaField ||
+            blockField.includes(schemaField) ||
+            schemaField.includes(blockField)
+        )) matches++;
+    }
+    return matches / schemaFields.length;
+}
+
+/**
+ * @param {object[]} blocks
+ * @param {object} schema
+ * @param {number} [minOverlap=0.34]  Fraction of schema fields that must plausibly match a block's own keys
+ * @returns {object[]} only the block(s) tied for the single best overlap score (empty if none clear minOverlap)
+ */
+function findRelevantBlocks(blocks, schema, minOverlap = 0.34) {
+    // Returning everything above a loose floor is a real false-positive risk
+    // with small schemas: a 2-field schema sharing just one common field
+    // (e.g. "name") with an unrelated WebSite block can clear a 0.34 floor on
+    // its own. Only returning the top-scoring block(s) — not everything above
+    // the floor — avoids that without needing a much stricter, more
+    // false-negative-prone floor.
+    const scored = blocks
+        .map(block => ({ block, overlap: fieldOverlapRatio(schema, block) }))
+        .filter(({ overlap }) => overlap >= minOverlap);
+
+    if (!scored.length) return [];
+
+    const maxOverlap = Math.max(...scored.map(s => s.overlap));
+    return scored
+        .filter(({ overlap }) => overlap === maxOverlap)
+        .map(({ block }) => block);
+}
+
+module.exports = { extractJsonLdBlocks, findByType, findRelevantBlocks, fieldOverlapRatio };

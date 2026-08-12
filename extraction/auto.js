@@ -10,13 +10,18 @@
 //      noise, even though an LLM still has to map it to your schema
 //   3. Rendered/raw text, handed to the LLM cold           — last resort
 //
-// Honest limitation: tiers 1-2 are deterministic and reliable. Tier 3 is not
-// — it's the fallback for pages with no structured markup and no recognized
-// hydration format, and it's where "any website" claims stop being fully
-// honest. See EXTRACTION_STRATEGIES.md. Don't oversell this.
+// Be precise about which tier is actually deterministic: only tier 1
+// (JSON-LD) is — no LLM involved, same input always produces the same
+// output. Tiers 2 and 3 both use an LLM to map data onto the schema; tier 2
+// is more reliable because it hands the LLM clean structured JSON instead of
+// raw markup (see BENCHMARKS.md for the measured latency/reliability
+// difference), but "more reliable than tier 3" is not "deterministic." Tier
+// 3 (no JSON-LD, no recognized hydration format) is the genuine last resort,
+// and where "any website" claims stop being fully honest. See
+// EXTRACTION_STRATEGIES.md. Don't oversell this.
 
 const { classifyHtml } = require('./classify');
-const { extractJsonLdBlocks, findByType } = require('./json-ld');
+const { extractJsonLdBlocks, findByType, findRelevantBlocks } = require('./json-ld');
 const { extractWithLLM } = require('./llm');
 const { validateItems } = require('./validate');
 const { estimateConfidence } = require('./confidence');
@@ -52,11 +57,13 @@ async function extractWithRetryOnEmpty(fn, attempts = 2) {
  *        Optional schema.org @type to filter tier-1 results by (e.g. "Review").
  *        A page can carry JSON-LD that's real but irrelevant to what you asked
  *        for (e.g. Restaurant/WebSite/BreadcrumbList blocks with no Review
- *        block at all) — without this hint, tier 1 has no way to know "JSON-LD
- *        is present" isn't the same as "JSON-LD answers your schema," and
- *        would wrongly short-circuit tiers 2/3. If omitted, tier 1 is used
- *        whenever ANY JSON-LD is present (best-effort, may return irrelevant
- *        blocks — only skip this hint if you're inspecting the page yourself).
+ *        block at all). Pass this when you know the type — it's an exact
+ *        match, strictly more precise than the heuristic below. If omitted,
+ *        tier 1 falls back to a field-overlap heuristic
+ *        (extraction/json-ld.js's findRelevantBlocks) that checks whether a
+ *        block's own keys plausibly match your schema before accepting it —
+ *        best-effort, not exact, but meaningfully better than accepting any
+ *        JSON-LD present regardless of relevance.
  * @param {Function} [options.renderWithBrowser]
  *        Optional `(url) => Promise<html>` — supply this to handle the
  *        needsBrowser=true case (this module doesn't launch a browser itself,
@@ -129,11 +136,18 @@ async function autoExtract(url, schema, options = {}) {
     // Tier 1: JSON-LD — deterministic, free, exact. No LLM involved.
     // "JSON-LD is present" isn't the same as "JSON-LD answers this schema" —
     // a page can carry real JSON-LD for unrelated things (WebSite, Breadcrumbs)
-    // with no block matching what was asked for. When jsonLdType is given,
-    // only short-circuit here if at least one block actually matches it.
+    // with no block matching what was asked for. Relevance, not mere
+    // presence, decides whether tier 1 short-circuits:
+    //   - jsonLdType given: exact @type match (findByType) — most precise,
+    //     prefer this whenever you know the schema.org type you want.
+    //   - jsonLdType omitted: best-effort field-overlap heuristic
+    //     (findRelevantBlocks) — not exact, but catches the common case
+    //     (e.g. a Restaurant/Product block whose own fields plainly match
+    //     the requested schema) without requiring the caller to know
+    //     schema.org vocabulary up front.
     if (classification.hasJsonLd) {
         const blocks = extractJsonLdBlocks(html);
-        const relevant = jsonLdType ? findByType(blocks, jsonLdType) : blocks;
+        const relevant = jsonLdType ? findByType(blocks, jsonLdType) : findRelevantBlocks(blocks, schema);
         if (relevant.length > 0) {
             onStep('extracted', { strategy: 'json-ld', count: relevant.length });
             return finish('json-ld', relevant);

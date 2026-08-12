@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-12T22:52:45.966Z",
+  "generatedAt": "2026-08-12T23:16:21.661Z",
   "model": "nvidia/llama-3.3-nemotron-super-49b-v1",
   "totalCases": 3,
   "successCount": 3,
@@ -9,7 +9,7 @@
     "json-ld": 1,
     "text": 1
   },
-  "avgLatencyMs": 15134,
+  "avgLatencyMs": 13998,
   "results": [
     {
       "name": "zomato-reviews (hydration tier)",
@@ -20,7 +20,7 @@
       "llmUsed": true,
       "confidence": 0.75,
       "validationValid": true,
-      "latencyMs": 42996,
+      "latencyMs": 39153,
       "error": null
     },
     {
@@ -32,7 +32,7 @@
       "llmUsed": false,
       "confidence": 0.95,
       "validationValid": true,
-      "latencyMs": 1085,
+      "latencyMs": 857,
       "error": null
     },
     {
@@ -44,7 +44,7 @@
       "llmUsed": true,
       "confidence": 0.5,
       "validationValid": true,
-      "latencyMs": 1322,
+      "latencyMs": 1985,
       "error": null
     }
   ]

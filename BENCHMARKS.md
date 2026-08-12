@@ -6,22 +6,34 @@ by `benchmark/run.js`. No estimated or extrapolated figures — if you see a
 number here, it was produced by a real run against a live page (and, for the
 LLM-tier cases, a real NIM API call).
 
-Last measured: 2026-08-12, model `nvidia/llama-3.3-nemotron-super-49b-v1`.
+Last measured: 2026-08-12T23:16Z, model `nvidia/llama-3.3-nemotron-super-49b-v1`.
+Re-run after the tier-1 relevance heuristic change (`findRelevantBlocks`,
+`extraction/json-ld.js`) — numbers below reflect current behavior, not a
+stale prior run.
 
 ## Results
 
 | Case | Tier used | LLM used | Items | Confidence | Latency | Result |
 |---|---|---|---|---|---|---|
-| Zomato reviews (asked for `Review` schema) | `hydration` | yes | 5 | 0.75 | 42,996ms | ✅ pass |
-| Zomato restaurant metadata (asked for `Restaurant` schema, `jsonLdType` hint given) | `json-ld` | no | 1 | 0.95 | 1,085ms | ✅ pass |
-| example.com (no structure at all) | `text` | yes | 1 | 0.50 | 1,322ms | ✅ pass |
+| Zomato reviews (asked for `Review` schema) | `hydration` | yes | 5 | 0.75 | 39,153ms | ✅ pass |
+| Zomato restaurant metadata (asked for `Restaurant` schema, `jsonLdType` hint given) | `json-ld` | no | 1 | 0.95 | 857ms | ✅ pass |
+| example.com (no structure at all) | `text` | yes | 1 | 0.50 | 1,985ms | ✅ pass |
 
 **3/3 passed.** 1 of 3 avoided the LLM entirely (the JSON-LD case, correctly
 short-circuited by tier 1). 2 of 3 needed an LLM call.
 
-**JSON-LD tier is ~40x faster than the LLM-backed hydration tier** in this
-run (1,085ms vs 42,996ms) — the concrete cost of escalating past tier 1 when
+**JSON-LD tier is ~45x faster than the LLM-backed hydration tier** in this
+run (857ms vs 39,153ms) — the concrete cost of escalating past tier 1 when
 it doesn't apply.
+
+**Separately verified (not part of this automated corpus, but real, live
+runs — see conversation record):** both the restaurant-metadata and reviews
+cases above were re-run *without* the `jsonLdType` hint, relying only on the
+field-overlap heuristic added to tier 1. Both produced the same correct
+result — the heuristic picked the Restaurant block for the metadata schema
+and correctly rejected all 3 JSON-LD blocks (including on a first attempt
+that revealed a real false-positive bug, since fixed) for the reviews
+schema, falling through to the hydration tier as it should.
 
 ## Known gaps — read before trusting this as representative
 
@@ -44,7 +56,7 @@ honest claim this data supports is narrower: *"in this starter corpus, the
 tier-1 JSON-LD shortcut worked correctly when relevant data was present, and
 was dramatically faster than the LLM-backed tiers when it did."*
 
-## Two real bugs this benchmark run caught and fixed
+## Three real bugs found and fixed via real testing
 
 Not hypothetical concerns — both found by running real cases and looking at
 what actually came back:
@@ -62,9 +74,19 @@ what actually came back:
    doesn't read as a list. Fixed in `extraction/llm.js`'s default system
    prompt — verified the fix works with no caller-supplied instructions, not
    just when explicitly told to via `instructions`.
+3. **The tier-1 relevance heuristic had a false-positive on small schemas.**
+   Added to make JSON-LD relevance checking automatic (not just via the
+   explicit `jsonLdType` hint) — the first version accepted any block
+   scoring above a fixed overlap floor, which meant a 2-field schema sharing
+   just one common field name (e.g. `name`) with an unrelated `WebSite`
+   block got wrongly accepted alongside the actually-relevant block. Fixed
+   by returning only the single best-scoring block(s), not everything above
+   the floor — caught by a committed test
+   (`test/json-ld.test.js`), not a live run, before it could reach
+   production behavior.
 
-Both fixes are now part of the default behavior, not something you need to
-configure.
+All three fixes are now part of the default behavior, not something you
+need to configure.
 
 ## Running this yourself
 
