@@ -75,7 +75,9 @@ npm install scraper-harness
 
 `playwright` and `undici` are optional — only needed for browser-rendered
 pages or HTTP proxy support, respectively. The JSON-LD tier and the CLI's
-common case need neither.
+common case need neither. Both are Apache-2.0/MIT licensed — compatible
+with this project's Apache-2.0 license, verified via each package's own
+`package.json`.
 
 ## Three ways to use this
 
