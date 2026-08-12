@@ -87,6 +87,15 @@ plus a bare `#root`/`#app`/`#__next` mount point with nothing inside).
 true, it throws unless you supplied `options.renderWithBrowser`. See
 `ARCHITECTURE.md`'s "Why no built-in browser fallback."
 
+**Note on the returned `needsBrowser` vs. `browserUsed` fields, found while
+building the browser-rendering benchmark case:** after a browser render,
+`auto.js` re-classifies the *rendered* HTML — so the `needsBrowser` field in
+the final result usually comes back `false` (real content exists now),
+which correctly answers "would a fresh fetch of this URL need a browser,"
+but can't tell you whether a browser was actually used for *this*
+extraction. `extraction.browserUsed` is the separate field for that. See
+`BENCHMARKS.md` for the real case that surfaced this gap.
+
 ## Adding a new hydration-state format
 
 `classify.js`'s `KNOWN_HYDRATION_GLOBALS` list is not exhaustive. If you hit

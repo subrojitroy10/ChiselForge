@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><title>SPA Test Page</title></head>
+<body>
+<div id="root"></div>
+<script>
+// Deliberately empty in the raw HTML response — content only appears after
+// this script runs, simulating a real client-rendered SPA (React/Vue/etc.
+// mounting into an empty shell). This is what extraction/classify.js's
+// needsBrowser heuristic is supposed to catch, and what renderWithBrowser
+// is supposed to recover from.
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('root').innerHTML =
+        '<div class="product">' +
+        '<h1 class="name">Wireless Keyboard Pro</h1>' +
+        '<span class="price">$59.99</span>' +
+        '<span class="rating">4.6</span>' +
+        '</div>';
+});
+</script>
+</body>
+</html>

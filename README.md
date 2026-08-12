@@ -107,6 +107,7 @@ const result = await autoExtract(url, {
 result.data;                    // extracted items
 result.extraction.strategy;     // 'json-ld' | 'hydration' | 'text'
 result.extraction.llmUsed;      // boolean
+result.extraction.browserUsed;  // boolean — was a browser actually rendered for this call?
 result.extraction.confidence;   // 0-1 heuristic, see ARCHITECTURE.md
 ```
 
@@ -123,7 +124,7 @@ infrastructure provides:
 - Rate limiting and proxy pools
 - Stagnation-aware lazy-load/infinite-scroll extraction
 - Pluggable extraction strategies
-- Site-specific adapters (in the sibling `scraper-adapters` package)
+- A public adapter interface for site-specific extraction logic (see `ADAPTERS.md` — production implementations of it are intentionally not published here, see "Real-world validation" below)
 - Schema validation and normalized output
 - Provider-agnostic LLM integration
 - Structured extraction logging
@@ -142,13 +143,22 @@ const { runWorkerPool, RateLimiter, ProxyPool, JobQueue } = require('scraper-har
 
 `autoExtract()` is the front door. This is the building.
 
-## Real adapters, not just a generic engine
+## Real-world validation
 
-Google Search/Maps, MagicPin, and Zomato adapters (built on this same
-engine, proven at production scale — see
-[`ADAPTERS.md`](ADAPTERS.md)) live in the sibling `scraper-adapters`
-package. This repo is the generic engine; that one is proof it holds up
-against real, difficult, dynamic sites — not just the happy path.
+The extraction engine has been validated against real-world dynamic
+websites during development, including pages using structured data,
+hydration state, and content requiring browser rendering — see
+[`BENCHMARKS.md`](BENCHMARKS.md) for the measured, reproducible results.
+
+Production-specific adapters and datasets are intentionally not included in
+this public repository. Site-specific adapters can carry operational,
+compliance, and provenance considerations that don't belong in a generic
+extraction runtime, and publishing them isn't necessary to prove the engine
+works — the benchmark does that on its own, with real numbers. This repo
+focuses on the reusable browser and extraction infrastructure; see
+[`ADAPTERS.md`](ADAPTERS.md) for the adapter interface itself, which is
+public and meant to be built on, even though specific production
+implementations of it aren't shipped here.
 
 ## Docs
 

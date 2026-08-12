@@ -12,17 +12,22 @@ contains none.
   that a full worker-pool adapter follows, and how the two transports
   (`transports/http.js`, `transports/browser.js`) and pagination-termination
   helpers (`core/pagination.js`) compose into one.
-- **Reference implementations are not in this repo.** Google Search/Maps,
-  MagicPin, and Zomato adapters — each proven against real, difficult,
-  dynamic sites at production scale — live in the sibling `scraper-adapters`
-  package, which depends on this one. See that repo's README for what each
-  one demonstrates and its current build/test status.
+- **No reference adapter implementations ship in this repo, and none are
+  planned as a separate public package right now.** This engine was
+  generalized out of production scraping pipelines, and those
+  production-specific adapters intentionally stay private — they can carry
+  operational, compliance, and provenance considerations (site-specific DOM
+  assumptions, ToS posture, business logic) that don't belong in a generic,
+  public extraction runtime, and publishing them isn't necessary to prove
+  the engine works. See [`BENCHMARKS.md`](BENCHMARKS.md) for that proof
+  instead — real, reproducible, measured runs of the *generic* engine
+  (`autoExtract`, not a site-specific adapter) against real sites.
 - **`autoExtract()` is not an adapter.** It's the generic engine
   (`EXTRACTION_STRATEGIES.md`) — it doesn't know about any specific site.
-  Reach for a real adapter when you need reliability against one particular
-  site beyond what the generic tiers can guarantee (e.g. you need every
-  page of a paginated review list, not just what one page's hydration state
-  contains).
+  Reach for a real adapter (built by you, following the interface below)
+  when you need reliability against one particular site beyond what the
+  generic tiers can guarantee (e.g. you need every page of a paginated
+  list, not just what one page's hydration state contains).
 
 ## When to write an adapter vs. use `autoExtract()`
 
@@ -54,7 +59,8 @@ target repeatedly and need the reliability/scale/resumability that
 4. Wire it into `runWorkerPool()` (`core/worker-loop.js`) for queueing,
    checkpointing, and retry.
 
-See `scraper-adapters`' Zomato adapter for a concrete example: HTTP
-transport only, hydration-state extraction (no LLM needed there — the exact
-field path is known ahead of time, unlike `autoExtract`'s generic case),
-`reviewId`-based dedup via `core/pagination.js`'s `DedupTracker`.
+No production-derived example ships with this repo (see "Current status"
+above for why). A clean, from-scratch example adapter — written against a
+stable public site with no production code or private logic behind it — is
+a reasonable future addition here; until one exists, `adapter-interface.md`
+plus the table above is the available guidance for building your own.

@@ -81,6 +81,7 @@ async function extractWithRetryOnEmpty(fn, attempts = 2) {
  *   extraction: {
  *     strategy: 'json-ld'|'hydration'|'text',
  *     llmUsed: boolean,
+ *     browserUsed: boolean,
  *     confidence: number,
  *     validation: { valid:boolean, totalItems:number, validItems:number, results:object[] },
  *     needsBrowser: boolean,
@@ -99,6 +100,7 @@ async function autoExtract(url, schema, options = {}) {
     const { html: rawHtml } = await fetchHtml(url, { timeoutMs: httpTimeoutMs });
     let html = rawHtml;
     let classification = classifyHtml(html);
+    let browserUsed = false;
     onStep('classified', classification);
 
     if (classification.needsBrowser) {
@@ -111,6 +113,12 @@ async function autoExtract(url, schema, options = {}) {
         }
         onStep('rendering-with-browser');
         html = await renderWithBrowser(url);
+        browserUsed = true;
+        // needsBrowser on the classification returned to the caller reflects
+        // this POST-render HTML (usually false now, since real content exists)
+        // — that's correct for "would a fresh fetch of this URL need a
+        // browser," but it means needsBrowser alone can't answer "was a
+        // browser used for THIS extraction." That's what browserUsed is for.
         classification = classifyHtml(html); // re-classify against the rendered HTML
         onStep('classified', classification);
     }
@@ -124,6 +132,7 @@ async function autoExtract(url, schema, options = {}) {
             extraction: {
                 strategy,
                 llmUsed: strategy !== 'json-ld',
+                browserUsed,
                 confidence,
                 validation,
                 needsBrowser: classification.needsBrowser,
