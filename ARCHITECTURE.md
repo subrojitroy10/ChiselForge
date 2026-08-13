@@ -86,7 +86,7 @@ interfaces — not before.
 ## Language choices
 
 **Runtime: Node.js, staying Node.js.** Playwright's ecosystem, native
-`fetch`, npm distribution, and the `npx scraper-harness` zero-install
+`fetch`, npm distribution, and the `npx chiselforge` zero-install
 experience all depend on it. Not up for debate.
 
 **JavaScript vs. TypeScript — currently JavaScript, this is a real open

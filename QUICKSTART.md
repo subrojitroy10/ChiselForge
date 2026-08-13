@@ -3,19 +3,19 @@
 ## Install
 
 ```bash
-npm install scraper-harness
+npm install chiselforge
 ```
 
 ## Run the CLI
 
 ```bash
-npx scraper-harness extract <url> --schema "field1, field2:type, ..."
+npx chiselforge extract <url> --schema "field1, field2:type, ..."
 ```
 
 Real example (this is a live, working command — try it):
 
 ```bash
-npx scraper-harness extract \
+npx chiselforge extract \
   "https://www.zomato.com/mumbai/british-brewing-company-lower-parel/reviews" \
   --schema "name, telephone, servesCuisine" \
   --json-ld-type Restaurant
@@ -48,7 +48,7 @@ through past JSON-LD to the hydration-state tier, which does use an LLM:
 ```bash
 export NIM_API_KEY="your-key-here"   # see LLM.md for provider options
 
-npx scraper-harness extract \
+npx chiselforge extract \
   "https://www.zomato.com/mumbai/british-brewing-company-lower-parel/reviews" \
   --schema "author, text, rating:number" \
   --json-ld-type Review \
@@ -91,7 +91,7 @@ rest is passed to the LLM as a hint, when an LLM tier is used.)
 ## JS API
 
 ```js
-const { autoExtract } = require('scraper-harness');
+const { autoExtract } = require('chiselforge');
 
 const result = await autoExtract(
     'https://example.com/product/123',

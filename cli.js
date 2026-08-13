@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// scraper-harness CLI — the zero-config entry point.
+// chiselforge CLI — the zero-config entry point.
 //
-//   scraper-harness extract <url> [--schema "name, price, rating"]
-//   scraper-harness extract <url> [--schema-file product.json]
-//   scraper-harness extract <url> --verbose
-//   scraper-harness extract <url> --output result.json
+//   chiselforge extract <url> [--schema "name, price, rating"]
+//   chiselforge extract <url> [--schema-file product.json]
+//   chiselforge extract <url> --verbose
+//   chiselforge extract <url> --output result.json
 //
 // Hand-rolled arg parsing, no CLI framework dependency — consistent with the
 // rest of this project's zero-dependency-by-default approach (see
@@ -57,10 +57,10 @@ function loadSchema() {
 
 function printUsage() {
     console.log(`
-scraper-harness — extract structured data from a webpage without writing a scraper
+chiselforge — extract structured data from a webpage without writing a scraper
 
 Usage:
-  scraper-harness extract <url> [options]
+  chiselforge extract <url> [options]
 
 Options:
   --schema "field, field:type, ..."   Quick schema, e.g. "name, price:number, rating:number"
@@ -74,7 +74,7 @@ Options:
   --help                               Show this message
 
 Example:
-  scraper-harness extract https://example.com/product/123 \\
+  chiselforge extract https://example.com/product/123 \\
     --schema "name, price:number, rating:number, reviews:array"
 `);
 }
@@ -106,13 +106,13 @@ async function main() {
     }
 
     if (args[0] !== 'extract') {
-        console.error(`Unknown command "${args[0]}". Try: scraper-harness extract <url>`);
+        console.error(`Unknown command "${args[0]}". Try: chiselforge extract <url>`);
         process.exit(1);
     }
 
     const url = args[1];
     if (!url || url.startsWith('--')) {
-        console.error('Usage: scraper-harness extract <url> [options]');
+        console.error('Usage: chiselforge extract <url> [options]');
         process.exit(1);
     }
 

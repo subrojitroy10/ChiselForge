@@ -30,9 +30,9 @@ shape) and add a fixture + test case in `test/fixtures/` +
 
 ## Adding an adapter
 
-Adapters (site-specific extraction logic) live in the sibling
-`scraper-adapters` repo, not here — see [`ADAPTERS.md`](ADAPTERS.md) for why
-and how to build one.
+Site-specific extraction logic (adapters) isn't published from this repo —
+see [`ADAPTERS.md`](ADAPTERS.md) for why and how to build your own against
+the public interface (`adapter-interface.md`).
 
 ## Reporting a bug in the LLM tier
 

@@ -13,8 +13,8 @@
 //    browser (e.g. resolving a venue name to a URL via a Google search+click).
 //
 // `playwright` is required by the caller, not this module — see the lazy
-// require pattern in Scrapper/zomato.js. This keeps the harness's HTTP-only
-// adapters (e.g. Zomato direct-URL mode) free of a playwright dependency.
+// require pattern in extraction/llm.js. This keeps HTTP-only usage (e.g.
+// autoExtract's JSON-LD/hydration tiers) free of a playwright dependency.
 
 const { spawn } = require('child_process');
 const http = require('http');

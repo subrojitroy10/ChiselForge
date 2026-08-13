@@ -1,9 +1,9 @@
-# scraper-harness
+# ChiselForge
 
 **Extract structured data from webpages without writing a scraper.**
 
 ```bash
-npx scraper-harness extract https://example.com/product/123 \
+npx chiselforge extract https://example.com/product/123 \
   --schema "name, price:number, rating:number"
 ```
 
@@ -70,7 +70,7 @@ often each tier actually fires — not marketing estimates.
 ## Install
 
 ```bash
-npm install scraper-harness
+npm install chiselforge
 ```
 
 `playwright` and `undici` are optional — only needed for browser-rendered
@@ -84,9 +84,9 @@ with this project's Apache-2.0 license, verified via each package's own
 ### 1. CLI (fastest way to try it)
 
 ```bash
-scraper-harness extract <url> --schema "field, field:type, ..."
-scraper-harness extract <url> --schema-file schema.json --output result.json
-scraper-harness extract <url> --verbose   # show every decision the pipeline made
+chiselforge extract <url> --schema "field, field:type, ..."
+chiselforge extract <url> --schema-file schema.json --output result.json
+chiselforge extract <url> --verbose   # show every decision the pipeline made
 ```
 
 Full options in [`QUICKSTART.md`](QUICKSTART.md).
@@ -94,7 +94,7 @@ Full options in [`QUICKSTART.md`](QUICKSTART.md).
 ### 2. JS/TS API
 
 ```js
-const { autoExtract } = require('scraper-harness');
+const { autoExtract } = require('chiselforge');
 
 const result = await autoExtract(url, {
     name: 'string',
@@ -140,7 +140,7 @@ venues with proxy rotation) before this repo existed. See
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ```js
-const { runWorkerPool, RateLimiter, ProxyPool, JobQueue } = require('scraper-harness');
+const { runWorkerPool, RateLimiter, ProxyPool, JobQueue } = require('chiselforge');
 ```
 
 `autoExtract()` is the front door. This is the building.

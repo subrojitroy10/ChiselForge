@@ -1,14 +1,15 @@
 # Adapter interface
 
-This harness (queue, checkpoint, rate limiter, proxy pool, logger, worker
-loop, both transports) has no knowledge of any specific website. An adapter
-is the piece that does — it lives in a separate package (`scraper-adapters`)
-and depends on this one.
+ChiselForge's engine (queue, checkpoint, rate limiter, proxy pool, logger,
+worker loop, both transports) has no knowledge of any specific website. An
+adapter is the piece that does. No production-derived reference adapters
+ship in this repo, and none are planned as a separate public package — see
+`ADAPTERS.md` for why. This document is the interface itself, meant to be
+built on even though specific implementations of it aren't published here.
 
 There is no enforced base class or TypeScript interface yet (v0.1 is
 JavaScript, and the interface below is a convention, not a runtime
-contract). Three reference adapters (Google, MagicPin, Zomato) exist in
-`scraper-adapters` and all follow this shape.
+contract).
 
 ## The shape
 
@@ -30,51 +31,49 @@ isDone(pageItems, dedupTracker)  // decides whether to keep paginating —
 
 An adapter's `processJob(job, ctx)` — the function passed into
 `runWorkerPool()` (see `core/worker-loop.js`) — is expected to compose these
-four pieces itself. The harness does not call `resolve`/`paginate`/etc.
-directly; it only calls `processJob(job, ctx)` once per job and treats a
-thrown error as failure, a resolved value as success.
+four pieces itself. ChiselForge's engine does not call
+`resolve`/`paginate`/etc. directly; it only calls `processJob(job, ctx)`
+once per job and treats a thrown error as failure, a resolved value as
+success.
 
 ## Transport binding
 
 Each adapter declares which transport it uses:
 
 - **Browser** (`transports/browser.js`) — for sites requiring rendered DOM
-  interaction (scrolling, clicking). The Google adapter uses
-  `BrowserRuntime` for the worker pool and `connectToLocalChrome` for its
-  optional search-and-resolve step.
+  interaction (scrolling, clicking). `BrowserRuntime` for worker-pool jobs,
+  `connectToLocalChrome` for an interactive search-and-resolve step.
 - **HTTP** (`transports/http.js`) — for sites that serve full content via a
-  plain GET (SSR pages). Both MagicPin and Zomato adapters use this
-  exclusively for extraction; Zomato additionally uses the browser
-  transport, but only for its optional search-and-resolve step, never for
-  extraction.
+  plain GET (SSR pages) — check `extraction/classify.js`'s `needsBrowser`
+  flag before assuming you need a browser at all.
 
-A single adapter can use both — resolve via browser, extract via HTTP — as
-Zomato's `--search` mode does. This is why `resolve` and
-`paginate`/`extractItems` are described as separate concerns above rather
-than bundled into one transport-locked object.
+A single adapter can use both — resolve via browser (e.g. a search-and-click
+step to find the target URL), extract via HTTP once the URL is known. This
+is why `resolve` and `paginate`/`extractItems` are described as separate
+concerns above rather than bundled into one transport-locked object.
 
 ## Termination strategies (`core/pagination.js`)
 
 Two proven approaches, pick based on whether items have a stable ID:
 
 - **`hashItems` / `isRepeatedPage`** — hash a page's serialized content;
-  stop when two consecutive pages hash identically (MagicPin: no stable
-  review ID was available from its DOM, so content hashing was the
-  reliable signal).
+  stop when two consecutive pages hash identically. Use this when no stable
+  per-item ID is available from the page's markup.
 - **`DedupTracker`** — track item IDs across pages; stop when a page
-  contributes zero new IDs (Zomato: `reviewId` is a real, stable field, so
-  ID-based dedup is more precise than hashing — it survives reordering
-  across pages, which a whole-page hash would not catch).
+  contributes zero new IDs. Use this when items carry a real, stable ID
+  (e.g. a numeric review ID) — it's more precise than content hashing since
+  it survives reordering across pages, which a whole-page hash would not
+  catch.
 
-## What the harness will NOT do for you
+## What ChiselForge will NOT do for you
 
 - It will not tell you when a site's markup/response shape has changed —
   adapters are expected to fail loudly (throw) when extraction comes back
   empty/malformed, not silently return nothing.
 - It will not solve CAPTCHAs or evade bot detection beyond what's already
-  proven (jittered delays, staggered startup, UA rotation, browser
+  demonstrated (jittered delays, staggered startup, UA rotation, browser
   fingerprint basics, optional proxy rotation). Don't build an adapter that
   assumes more than that.
 - It will not validate that your adapter is legally permitted to scrape its
   target. That's the adapter author's responsibility — document ToS
-  posture per-adapter (see `scraper-adapters`' own README convention).
+  posture in your own adapter's docs.
