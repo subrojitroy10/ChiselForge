@@ -2,6 +2,8 @@
 
 **Extract structured data from webpages without writing a scraper.**
 
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 ```bash
 npx chiselforge extract https://example.com/product/123 \
   --schema "name, price:number, rating:number"
