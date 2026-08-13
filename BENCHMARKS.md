@@ -100,11 +100,44 @@ easy.
 All four fixes are default behavior now, not something you need to
 configure.
 
+## Live external SPA validation: stron.in (2026-08-12)
+
+The local-fixture SPA case above proves the mechanism; this is the same
+mechanism exercised against a real, live, external site to confirm it holds
+up outside a controlled fixture — a genuine React/Vite-style SPA where
+almost nothing is present without a browser.
+
+`crawl` was run against `https://stron.in/` twice, same schema and model,
+one variable changed:
+
+- **Browser rendering available:** 11/11 discovered pages extracted
+  successfully, with real, non-trivial rendered content (`rawText` and
+  schema-shaped `data` both reflected the actual page, not an empty shell).
+- **Browser rendering withheld (internal test build only — never shipped
+  as a CLI flag):** 0/11 pages extracted. Every page's raw HTTP response was
+  an empty SPA shell (~40 characters of markup), and the pipeline correctly
+  refused to invent content — it surfaced a clear "this page needs a
+  browser" error for every page rather than fabricating a plausible-looking
+  result from nothing.
+
+This confirms two things at once: browser rendering is not a marginal
+quality improvement for SPA-shaped sites, it's the difference between
+"works" and "nothing to extract" — and the honest-failure behavior (see
+above) holds even in a real multi-page crawl, not just the single-page
+benchmark case. Browser rendering therefore stays automatic and
+unconditional in the public CLI — the tool decides when it's needed via
+`classifyHtml`, the same way it decides which extraction tier to use. There
+is no user-facing switch to turn it off; disabling it has no legitimate
+end-user workflow, only a debugging one, so it isn't exposed as product
+surface. Engineers who want to force the no-browser code path for their own
+testing can do so at the library level by calling `autoExtract`/`crawlSite`
+directly without a `renderWithBrowser` option.
+
 ## Known gaps — still not covered
 
-- **React/SPA rendering was validated with a local fixture, not a live
-  external SPA.** The mechanism is proven; a live external example would
-  add real-world confidence on top of that, not change the mechanism.
+- ~~React/SPA rendering was validated with a local fixture, not a live
+  external SPA.~~ Closed above — validated against `stron.in`, a real
+  live external SPA, with a real multi-page crawl.
 - **8 cases is a real, diverse corpus, not a token one — but it is not the
   10-20 case target** a mature benchmark should reach. Grow it further
   before treating any percentage derived from this data as broadly
