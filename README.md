@@ -23,13 +23,26 @@ Loading https://example.com/product/123 ...
 That output above is real — captured from an actual run against a live page,
 not a mockup. See [`QUICKSTART.md`](QUICKSTART.md) for the exact command.
 
+## In plain terms
+
+You give it a link and describe what you want in a sentence or two. It
+figures out the cheapest way to actually get that data — reading structured
+data the page already exposes when it can, asking an AI model to read the
+page when it has to — and hands you back clean JSON. You don't write
+selectors, you don't learn a scraping library, and you don't pay for an AI
+call on pages that didn't need one.
+
+## For engineers
+
 It starts with structured data already exposed by the page and only uses an
 LLM when deterministic extraction alone isn't sufficient. You can see and
 control exactly which tier ran — `extraction.strategy` and
 `extraction.llmUsed` are in every result, and `--verbose` prints the decision
-trail as it happens.
+trail as it happens. Nothing about this decision is hidden from you if you
+want to see it — see "Three ways to use this" below for the full range from
+zero-config CLI down to the raw engine primitives.
 
-## The core idea
+### The core idea
 
 > Use the cheapest, most deterministic extraction method that can reliably
 > answer the request, and only escalate when necessary.
@@ -78,6 +91,18 @@ pages or HTTP proxy support, respectively. The JSON-LD tier and the CLI's
 common case need neither. Both are Apache-2.0/MIT licensed — compatible
 with this project's Apache-2.0 license, verified via each package's own
 `package.json`.
+
+## For AI agents and coding tools
+
+`autoExtract(url, schema)` is a single, self-contained call with a JSON-in,
+JSON-out shape — no session state, no multi-step setup — which makes it
+straightforward for an agent (Claude, Cursor, Codex, etc.) to call as a
+tool: "extract all the products from this page" maps directly onto one
+function call with a schema, and gets back validated structured data plus a
+plain record of how it got there (`extraction.strategy`, `llmUsed`,
+`confidence`). There's no MCP server shipping yet — that's a natural future
+wrapper around this same call, not a redesign — but the API is already
+shaped for it today, via the CLI or the JS function directly.
 
 ## Three ways to use this
 
