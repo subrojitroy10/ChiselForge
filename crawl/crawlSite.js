@@ -20,6 +20,7 @@ const { autoExtract } = require('../extraction/auto');
 const { runWorkerPool } = require('../core/worker-loop');
 const { fetchHtml } = require('../transports/http');
 const { htmlToText } = require('../extraction/html-to-text');
+const { classifyHtml } = require('../extraction/classify');
 
 // Real bug found via live testing (crawling stron.in twice in a row):
 // checkpointDir used to default to a hash of the seed URL ALONE, so two
@@ -148,6 +149,19 @@ async function crawlSite(seed, schema, options = {}) {
                     warnings, error: `fetch failed: ${err.message}`,
                 });
                 throw err; // let runWorkerPool's retry/checkpoint logic handle it
+            }
+
+            // Real gap found and fixed: rawText used to be captured from the
+            // PRE-render fetch only, so browser-rendered pages (a Vite/React
+            // SPA, e.g.) got a ~40-character empty-shell rawText even though
+            // the schema-shaped `data` field had real rendered content —
+            // found by inspecting real crawl output against stron.in, not
+            // hypothetical. Resolve rendering HERE, before capturing rawText,
+            // so it reflects whatever content autoExtract will actually see.
+            // The resolved html is then passed into autoExtract via
+            // options.html so it doesn't re-render a second time.
+            if (classifyHtml(html).needsBrowser && extractOptions.renderWithBrowser) {
+                html = await extractOptions.renderWithBrowser(job.url);
             }
 
             // Raw deterministic text — never LLM-paraphrased, always captured

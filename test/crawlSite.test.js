@@ -91,6 +91,52 @@ test('two separate crawlSite() calls against the same seed with no explicit chec
     }
 });
 
+// Regression test for a real gap found inspecting actual stron.in crawl
+// output: rawText used to be captured from the PRE-render fetch only, so a
+// browser-rendered page's rawText was just the ~40-character empty-shell
+// title, even though the schema-shaped `data` field had real rendered
+// content. Fixed by resolving rendering before capturing rawText.
+test('rawText reflects rendered content for a page that needed a browser, not the pre-render empty shell', async () => {
+    // Includes matching JSON-LD so extraction succeeds via the deterministic
+    // tier 1 — no LLM/API key needed, keeping this test offline and isolating
+    // the actual concern (rawText fidelity) from LLM retry mechanics. An
+    // earlier version of this test used LLM-tier-only content with no API
+    // key supplied, which failed and retried, calling renderWithBrowser
+    // twice — correct retry behavior, but it made the test's own expectation
+    // wrong, not the fix under test. Found by writing a standalone debug
+    // script when the assertion failed unexpectedly.
+    const RENDERED_HTML = `<html><body>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Wireless Keyboard Pro"}</script>
+<div id="root"><h1>Wireless Keyboard Pro</h1><p>A great keyboard, genuinely in stock.</p></div>
+</body></html>`;
+    const server = await startLocalServer(path.join(__dirname, '..', 'benchmark', 'fixtures'));
+    const checkpointDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chiselforge-crawl-rendered-rawtext-'));
+
+    try {
+        let renderCallCount = 0;
+        const renderWithBrowser = async () => { renderCallCount++; return RENDERED_HTML; };
+
+        const result = await crawlSite(server.url('spa-product.html'), { name: 'string' }, {
+            maxPages: 1, workers: 1, delayMs: 0, checkpointDir,
+            extractOptions: { renderWithBrowser },
+        });
+
+        assert.equal(result.pagesExtracted, 1);
+        const page = result.pages[0];
+        assert.equal(page.error, null);
+        assert.ok(page.rawText.includes('Wireless Keyboard Pro'), `rawText should contain real rendered content, got: ${JSON.stringify(page.rawText)}`);
+        assert.ok(page.rawText.includes('genuinely in stock'), 'rawText should contain the full rendered paragraph, not just a title');
+        assert.ok(!page.rawText.startsWith('SPA Test Page') || page.rawText.length > 20, 'rawText should not be just the pre-render shell title');
+
+        // The browser should only render once — crawlSite resolves rendering
+        // itself and passes the result into autoExtract via options.html,
+        // which must not trigger a second render internally.
+        assert.equal(renderCallCount, 1, 'page should only be rendered once, not twice');
+    } finally {
+        await server.close();
+    }
+});
+
 // When a checkpointDir IS deliberately reused, previously-completed pages
 // must report their real persisted data, not "not processed."
 test('reusing checkpointDir on purpose correctly reports previously-completed pages with real data, not as unprocessed', async () => {
