@@ -24,17 +24,42 @@ function flag(name) {
     return process.argv.includes(name);
 }
 
-// Lazily launches ONE shared headless browser (reused across every page of a
-// crawl, not relaunched per page) and returns a renderWithBrowser(url) function
-// for autoExtract's needsBrowser fallback. playwright is only required here —
-// `extract`/`crawl` runs that never hit a needsBrowser=true page never pay for
-// it. Caller is responsible for calling the returned close() when done.
-function createBrowserRenderer() {
+// Anti-detection launch args, ported from the Google-places scraper
+// (Scrapper for open source/Google/worker.js) — a real, proven config, not
+// invented for this. --disable-blink-features=AutomationControlled is the
+// load-bearing one: it hides the navigator.webdriver flag Chromium sets by
+// default, one of the most common headless-automation signals sites check
+// for. Only applied in stealth mode (--render-on-block) — the plain
+// empty-shell fallback isn't an anti-detection scenario, so it stays
+// headless and args-free, same as before.
+const STEALTH_BROWSER_ARGS = [
+    '--disable-dev-shm-usage',
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-blink-features=AutomationControlled',
+    '--start-maximized',
+    '--no-first-run',
+    '--no-default-browser-check',
+];
+
+// Lazily launches ONE shared browser (reused across every page of a crawl,
+// not relaunched per page) and returns a renderWithBrowser(url) function for
+// autoExtract's needsBrowser fallback. playwright is only required here —
+// `extract`/`crawl` runs that never hit a needsBrowser=true page never pay
+// for it. Caller is responsible for calling the returned close() when done.
+//
+// stealth: true launches a real, visible (headless: false) browser with the
+// anti-detection args above — only meaningful for the --render-on-block
+// case, where the whole point is getting past bot-detection that a plain
+// headless launch is more likely to get flagged by.
+function createBrowserRenderer({ stealth = false } = {}) {
     let browserPromise = null;
     async function getBrowser() {
         if (!browserPromise) {
             const { chromium } = require('playwright');
-            browserPromise = chromium.launch({ headless: true });
+            browserPromise = stealth
+                ? chromium.launch({ headless: false, args: STEALTH_BROWSER_ARGS })
+                : chromium.launch({ headless: true });
         }
         return browserPromise;
     }
@@ -102,8 +127,9 @@ extract options:
   --json-ld-type <Type>                Only accept JSON-LD blocks of this schema.org @type (e.g. "Review")
   --output <path.json>                 Write result here (default: prints to stdout)
   --render-on-block                    If a page is blocked (HTTP 403/429/503, typical of bot-detection), try
-                                        rendering it with a real browser before giving up. Off by default — this is a
-                                        deliberate choice to attempt bypassing anti-bot checks, not a neutral default.
+                                        rendering it with a real, visible browser (not headless) before giving up,
+                                        using anti-detection launch args. Off by default — this is a deliberate
+                                        choice to attempt bypassing anti-bot checks, not a neutral default.
   --verbose                            Show every pipeline step, not just the summary
 
 crawl options (all of the above, plus):
@@ -184,13 +210,14 @@ async function runExtract(args) {
         console.log(`  ✓ ${label}`);
     };
 
-    const renderer = createBrowserRenderer();
+    const renderOnBlock = flag('--render-on-block');
+    const renderer = createBrowserRenderer({ stealth: renderOnBlock });
     let result;
     try {
         result = await autoExtract(url, schema, {
             ...sharedLlmOptions(), jsonLdType, onStep,
             renderWithBrowser: renderer.renderWithBrowser,
-            renderOnBlock: flag('--render-on-block'),
+            renderOnBlock,
         });
     } catch (err) {
         console.error(`\n✗ Extraction failed: ${err.message}\n`);
@@ -248,7 +275,8 @@ async function runCrawl(args) {
         }
     };
 
-    const renderer = createBrowserRenderer();
+    const renderOnBlock = flag('--render-on-block');
+    const renderer = createBrowserRenderer({ stealth: renderOnBlock });
     let result;
     try {
         result = await crawlSite(seed, schema, {
@@ -256,7 +284,7 @@ async function runCrawl(args) {
             extractOptions: {
                 ...sharedLlmOptions(), jsonLdType,
                 renderWithBrowser: renderer.renderWithBrowser,
-                renderOnBlock: flag('--render-on-block'),
+                renderOnBlock,
             },
         });
     } finally {
