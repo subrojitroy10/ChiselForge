@@ -2,32 +2,40 @@
 
 For engineers extending this or deciding whether to build on it.
 
-## Two layers
+## Three layers
 
 ```
-cli.js                          ← Layer 1: zero-config CLI
+cli.js                          ← Layer 1: zero-config CLI (extract | crawl)
     │
-    ▼
-extraction/auto.js              ← Layer 2: autoExtract(url, schema) — composed pipeline
-    │
+    ├──────────────────────────────────────┐
+    ▼                                       ▼
+extraction/auto.js               crawl/crawlSite.js  ← Layer 2b: multi-page crawl
+autoExtract(url, schema)              │      (composes crawl/discover.js's generic
+    — one page in, one         │      link discovery with runWorkerPool + autoExtract
+    result out                 │      below — no site-specific code)
+    │                          │
     ├── extraction/classify.js      "what kind of page is this"
     ├── extraction/json-ld.js       tier 1 — deterministic
     ├── extraction/llm.js           tier 2/3 — LLM-backed
     ├── extraction/validate.js      schema validation
     └── extraction/confidence.js    heuristic confidence score
-    │
-    ▼
+    │                          │
+    ▼                          ▼
 transports/http.js, transports/browser.js    ← how pages are actually fetched
-    │
-    ▼
+    │                          │
+    │                          ▼
+    │                    core/worker-loop.js  ← checkpointed, rate-limited,
+    │                          │                 retryable multi-job execution
+    ▼                          ▼
 core/*                          ← Layer 3: engineering API (job queue, checkpoint,
                                    rate limiter, proxy pool, logger, worker pool)
 ```
 
-`autoExtract` is a consumer of the engineering layer, not a replacement for
-it. If you're building something that needs to process thousands of URLs
-reliably — not just "run this once" — go straight to `core/worker-loop.js`'s
-`runWorkerPool` and call `autoExtract` (or your own extraction logic) as the
+`autoExtract` and `crawlSite` are both consumers of the engineering layer,
+not a replacement for it. If you're building something that needs to
+process thousands of URLs reliably — not just "run this once" — go straight
+to `core/worker-loop.js`'s `runWorkerPool` and call `autoExtract` (or your
+own extraction logic, or `crawlSite` itself) as the
 per-job function.
 
 ## The extraction pipeline, in order
@@ -47,6 +55,30 @@ per-job function.
    field presence and rough type match against the schema.
 6. **`estimateConfidence(tier, validation)`** (`extraction/confidence.js`) —
    a fixed heuristic (see the file's own comments), not a trained model.
+
+## Multi-page crawling (`crawl/`)
+
+`crawlSite(seed, schema, options)` composes three pieces that each already
+existed independently, tied together for the first time by this module:
+
+1. **`crawl/discover.js`** — generic (no site-specific logic) page discovery.
+   Tries `sitemap.xml`/`robots.txt` first, then falls back to a same-origin
+   BFS crawl of `<a href>` links. Ported from `web-UI/automate.js`, which
+   already implemented this generically for a different purpose (frontend
+   tech-stack inspection) — direct reuse, not a rewrite.
+2. **`core/worker-loop.js`'s `runWorkerPool`** — gives the crawl
+   checkpointing (resumable — re-running against the same `checkpointDir`
+   skips pages already done), configurable concurrency, and retry, for free.
+3. **`extraction/auto.js`'s `autoExtract`** — the actual per-page extraction,
+   unchanged. `crawlSite` fetches each page's HTML once and passes it to
+   `autoExtract` via `options.html` (added specifically for this — see that
+   file's comments) rather than fetching twice.
+
+**Raw text is captured separately from the schema-shaped result, on
+purpose.** `htmlToText(html)` runs on every page regardless of which
+extraction tier fires — deterministic, never LLM-paraphrased. This means a
+crawl's output is never *solely* dependent on how faithfully an LLM
+summarized a page into your schema; the raw corpus is there independently.
 
 ## Why no built-in browser fallback
 

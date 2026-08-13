@@ -5,6 +5,7 @@
 //   chiselforge extract <url> [--schema-file product.json]
 //   chiselforge extract <url> --verbose
 //   chiselforge extract <url> --output result.json
+//   chiselforge crawl <seed-url> [--schema "..."] [--max-pages 50] [--output dir]
 //
 // Hand-rolled arg parsing, no CLI framework dependency — consistent with the
 // rest of this project's zero-dependency-by-default approach (see
@@ -13,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { autoExtract } = require('./extraction/auto');
+const { crawlSite } = require('./crawl/crawlSite');
 
 function option(name, fallback) {
     const i = process.argv.indexOf(name);
@@ -61,23 +63,33 @@ chiselforge — extract structured data from a webpage without writing a scraper
 
 Usage:
   chiselforge extract <url> [options]
+  chiselforge crawl <seed-url> [options]
 
-Options:
+extract options:
   --schema "field, field:type, ..."   Quick schema, e.g. "name, price:number, rating:number"
   --schema-file <path.json>            Schema as a JSON file: { "name": "string", "price": "number" }
   --json-ld-type <Type>                Only accept JSON-LD blocks of this schema.org @type (e.g. "Review")
   --output <path.json>                 Write result here (default: prints to stdout)
+  --verbose                            Show every pipeline step, not just the summary
+
+crawl options (all of the above, plus):
+  --max-pages <n>                       Page discovery cap (default: 50)
+  --workers <n>                         Concurrent pages processed at once (default: 3)
+  --output <dir>                        Write index.json + one file per page here (default: prints index to stdout)
+
+shared LLM options:
   --api-key <key>                      LLM API key (falls back to NIM_API_KEY env var)
   --base-url <url>                     LLM endpoint (default: NVIDIA NIM) — point at OpenAI, a local Ollama
                                         server, or any other OpenAI-compatible host to switch providers
   --model <model-id>                   LLM model (default: nvidia/llama-3.3-nemotron-super-49b-v1)
   --instructions "<text>"              Extra guidance for the LLM tiers (e.g. "only dining reviews, not delivery")
-  --verbose                            Show every pipeline step, not just the summary
   --help                               Show this message
 
-Example:
+Examples:
   chiselforge extract https://example.com/product/123 \\
     --schema "name, price:number, rating:number, reviews:array"
+
+  chiselforge crawl https://example.com/ --max-pages 30 --output ./crawl-result
 `);
 }
 
@@ -99,19 +111,16 @@ const STEP_LABELS = {
         : `Validation: ${v.validItems}/${v.totalItems} item(s) matched schema`,
 };
 
-async function main() {
-    const args = process.argv.slice(2);
+function sharedLlmOptions() {
+    return {
+        apiKey: option('--api-key', process.env.NIM_API_KEY),
+        baseUrl: option('--base-url', undefined),
+        model: option('--model', undefined),
+        instructions: option('--instructions', undefined),
+    };
+}
 
-    if (flag('--help') || args.length === 0) {
-        printUsage();
-        process.exit(args.length === 0 ? 1 : 0);
-    }
-
-    if (args[0] !== 'extract') {
-        console.error(`Unknown command "${args[0]}". Try: chiselforge extract <url>`);
-        process.exit(1);
-    }
-
+async function runExtract(args) {
     const url = args[1];
     if (!url || url.startsWith('--')) {
         console.error('Usage: chiselforge extract <url> [options]');
@@ -121,10 +130,6 @@ async function main() {
     const verbose = flag('--verbose');
     const schema = loadSchema();
     const jsonLdType = option('--json-ld-type', undefined);
-    const apiKey = option('--api-key', process.env.NIM_API_KEY);
-    const baseUrl = option('--base-url', undefined);
-    const model = option('--model', undefined);
-    const instructions = option('--instructions', undefined);
     const outputPath = option('--output', null);
 
     if (!verbose) console.log(`Loading ${url} ...`);
@@ -137,7 +142,7 @@ async function main() {
 
     let result;
     try {
-        result = await autoExtract(url, schema, { apiKey, baseUrl, model, jsonLdType, instructions, onStep });
+        result = await autoExtract(url, schema, { ...sharedLlmOptions(), jsonLdType, onStep });
     } catch (err) {
         console.error(`\n✗ Extraction failed: ${err.message}\n`);
         process.exit(1);
@@ -157,6 +162,84 @@ async function main() {
     } else {
         console.log('\n' + JSON.stringify(result, null, 2));
     }
+}
+
+function slugForUrl(url) {
+    return url.toLowerCase().replace(/^https?:\/\//, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 150) || 'page';
+}
+
+async function runCrawl(args) {
+    const seed = args[1];
+    if (!seed || seed.startsWith('--')) {
+        console.error('Usage: chiselforge crawl <seed-url> [options]');
+        process.exit(1);
+    }
+
+    const schema = loadSchema();
+    const jsonLdType = option('--json-ld-type', undefined);
+    const maxPages = Number(option('--max-pages', 50));
+    const workers = Number(option('--workers', 3));
+    const outputDir = option('--output', null);
+
+    console.log(`Crawling ${seed} (max ${maxPages} pages, ${workers} workers)...\n`);
+
+    const onProgress = (event, detail) => {
+        if (event === 'discovered') {
+            console.log(`Discovered ${detail.pageCount} page(s) — ${detail.sitemapPageCount} via sitemap, ${detail.crawledPageCount} via link crawl\n`);
+        } else if (event === 'page-done') {
+            console.log(`  ✓ ${detail.url} — ${detail.strategy}${detail.llmUsed ? ' (LLM)' : ''}`);
+        } else if (event === 'page-error') {
+            console.log(`  ✗ ${detail.url} — ${detail.error}`);
+        }
+    };
+
+    const result = await crawlSite(seed, schema, {
+        maxPages, workers, onProgress,
+        extractOptions: { ...sharedLlmOptions(), jsonLdType },
+    });
+
+    const index = {
+        seed: result.seed,
+        pagesDiscovered: result.pagesDiscovered,
+        pagesExtracted: result.pagesExtracted,
+        pagesFailed: result.pagesFailed,
+        discoveryFailures: result.discoveryFailures,
+        pages: result.pages.map(p => ({
+            url: p.url, title: p.title, strategy: p.strategy, llmUsed: p.llmUsed,
+            browserUsed: p.browserUsed, confidence: p.confidence,
+            itemCount: p.data.length, warnings: p.warnings, error: p.error,
+        })),
+    };
+
+    console.log(`\n${result.pagesExtracted}/${result.pagesDiscovered} pages extracted successfully`);
+
+    if (outputDir) {
+        const resolved = path.resolve(process.cwd(), outputDir);
+        fs.mkdirSync(path.join(resolved, 'pages'), { recursive: true });
+        fs.writeFileSync(path.join(resolved, 'index.json'), JSON.stringify(index, null, 2));
+        for (const page of result.pages) {
+            fs.writeFileSync(path.join(resolved, 'pages', `${slugForUrl(page.url)}.json`), JSON.stringify(page, null, 2));
+        }
+        console.log(`Index: ${path.join(resolved, 'index.json')}`);
+        console.log(`Pages: ${path.join(resolved, 'pages')}`);
+    } else {
+        console.log('\n' + JSON.stringify(index, null, 2));
+    }
+}
+
+async function main() {
+    const args = process.argv.slice(2);
+
+    if (flag('--help') || args.length === 0) {
+        printUsage();
+        process.exit(args.length === 0 ? 1 : 0);
+    }
+
+    if (args[0] === 'extract') return runExtract(args);
+    if (args[0] === 'crawl') return runCrawl(args);
+
+    console.error(`Unknown command "${args[0]}". Try: chiselforge extract <url> or chiselforge crawl <seed-url>`);
+    process.exit(1);
 }
 
 main().catch(err => {

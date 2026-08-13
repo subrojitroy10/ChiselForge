@@ -103,6 +103,33 @@ console.log(result.data);
 console.log(result.extraction.strategy);   // which tier answered
 ```
 
+## Crawl a whole site
+
+`extract` handles one page. `crawl` discovers every same-origin page from a
+seed URL (sitemap.xml first, then a same-origin link crawl to fill in the
+rest) and runs each one through the same tiered pipeline — checkpointed and
+resumable, so re-running against the same `--output` dir skips pages already
+done.
+
+```bash
+chiselforge crawl https://example.com/ \
+  --schema "title, description" \
+  --max-pages 30 \
+  --output ./crawl-result
+```
+
+Writes `crawl-result/index.json` (one line per page: URL, title, which tier
+answered, `llmUsed`, confidence, warnings) plus one JSON file per page under
+`crawl-result/pages/` containing the full result — schema-shaped structured
+data **and** the raw deterministic visible text (never LLM-paraphrased,
+captured regardless of which tier fires) so the corpus isn't solely
+dependent on how the LLM chose to summarize a page.
+
+No site-specific code — the link discovery (`crawl/discover.js`) works the
+same way against any site. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how
+this composes `core/worker-loop.js` (checkpointing/concurrency) with
+`autoExtract()` (per-page extraction).
+
 ## Next steps
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — how this is built, for extending it

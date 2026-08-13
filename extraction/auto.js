@@ -76,6 +76,7 @@ async function extractWithRetryOnEmpty(fn, attempts = 2) {
  *        to keep it usable without a playwright dependency present). If
  *        omitted and a browser turns out to be required, this throws with a
  *        clear message rather than silently returning nothing.
+ * @param {string} [options.html]          Pre-fetched HTML — skips the internal fetch if supplied (e.g. for crawlers that already fetched the page)
  * @param {number} [options.httpTimeoutMs]
  * @param {number} [options.hydrationMaxChars] Tier-2-specific — see extraction/llm.js's `maxChars`
  * @param {(step:string, detail?:object)=>void} [options.onStep]
@@ -107,9 +108,18 @@ async function autoExtract(url, schema, options = {}) {
     // directly.
     const llmBaseOptions = { apiKey, baseUrl, model };
 
-    onStep('fetching', { url });
-    const { html: rawHtml } = await fetchHtml(url, { timeoutMs: httpTimeoutMs });
-    let html = rawHtml;
+    // Callers that already fetched this page themselves (e.g. crawl/crawlSite.js,
+    // which needs the raw HTML anyway for deterministic text capture) can pass
+    // it in directly to avoid a redundant second fetch — the tier logic below
+    // is identical either way.
+    let html;
+    if (options.html != null) {
+        onStep('fetching', { url, reused: true });
+        html = options.html;
+    } else {
+        onStep('fetching', { url });
+        html = (await fetchHtml(url, { timeoutMs: httpTimeoutMs })).html;
+    }
     let classification = classifyHtml(html);
     let browserUsed = false;
     onStep('classified', classification);

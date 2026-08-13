@@ -21,4 +21,8 @@ module.exports = {
     autoExtract: require('./extraction/auto').autoExtract,
     validate: require('./extraction/validate'),
     confidence: require('./extraction/confidence'),
+
+    // crawling
+    discoverPages: require('./crawl/discover').discoverPages,
+    crawlSite: require('./crawl/crawlSite').crawlSite,
 };

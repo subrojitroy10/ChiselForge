@@ -112,9 +112,13 @@ shaped for it today, via the CLI or the JS function directly.
 chiselforge extract <url> --schema "field, field:type, ..."
 chiselforge extract <url> --schema-file schema.json --output result.json
 chiselforge extract <url> --verbose   # show every decision the pipeline made
+
+chiselforge crawl <seed-url> --schema "..." --max-pages 30 --output ./result
 ```
 
-Full options in [`QUICKSTART.md`](QUICKSTART.md).
+`crawl` discovers every same-origin page from a seed URL and runs each one
+through the same tiered pipeline — checkpointed, resumable, no site-specific
+code. Full options in [`QUICKSTART.md`](QUICKSTART.md).
 
 ### 2. JS/TS API
 
@@ -155,6 +159,7 @@ infrastructure provides:
 - Schema validation and normalized output
 - Provider-agnostic LLM integration
 - Structured extraction logging
+- Generic same-origin site crawling (`crawlSite` / `discoverPages`) — sitemap + link discovery composed with the worker pool above, no site-specific code
 
 Use the high-level API when you just need data. Compose the underlying
 primitives directly when building a larger scraping or browser-automation
@@ -165,7 +170,7 @@ venues with proxy rotation) before this repo existed. See
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ```js
-const { runWorkerPool, RateLimiter, ProxyPool, JobQueue } = require('chiselforge');
+const { runWorkerPool, RateLimiter, ProxyPool, JobQueue, crawlSite } = require('chiselforge');
 ```
 
 `autoExtract()` is the front door. This is the building.
