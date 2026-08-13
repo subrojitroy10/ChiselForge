@@ -63,3 +63,57 @@ test('resuming a crawl against the same checkpointDir skips already-completed pa
         await server.close();
     }
 });
+
+// Regression test for a real bug found crawling stron.in twice: checkpointDir
+// used to default to a hash of the seed URL alone, so two unrelated
+// invocations against the same URL silently shared state, and the second
+// run reported the first run's successful pages as "not processed" (no
+// persisted data existed to report, only a boolean checkpoint marker).
+test('two separate crawlSite() calls against the same seed with no explicit checkpointDir do not share state', async () => {
+    const server = await startLocalServer(path.join(__dirname, 'fixtures', 'mini-site'));
+    try {
+        const first = await crawlSite(server.url('index.html'), { title: 'string' }, {
+            maxPages: 10, workers: 2, delayMs: 0,
+            // no checkpointDir supplied — exercises the default
+        });
+        assert.equal(first.pagesExtracted, 3);
+
+        const second = await crawlSite(server.url('index.html'), { title: 'string' }, {
+            maxPages: 10, workers: 2, delayMs: 0,
+            // no checkpointDir supplied again — must NOT see the first call's state
+        });
+        assert.equal(second.pagesExtracted, 3, 'second call should process all 3 pages fresh, not see them as already done with no data');
+        for (const page of second.pages) {
+            assert.equal(page.error, null, `page ${page.url} should have succeeded, not be reported as unprocessed`);
+        }
+    } finally {
+        await server.close();
+    }
+});
+
+// When a checkpointDir IS deliberately reused, previously-completed pages
+// must report their real persisted data, not "not processed."
+test('reusing checkpointDir on purpose correctly reports previously-completed pages with real data, not as unprocessed', async () => {
+    const server = await startLocalServer(path.join(__dirname, 'fixtures', 'mini-site'));
+    const checkpointDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chiselforge-crawl-reuse-'));
+
+    try {
+        const first = await crawlSite(server.url('index.html'), { title: 'string' }, {
+            maxPages: 10, workers: 2, delayMs: 0, checkpointDir,
+        });
+        assert.equal(first.pagesExtracted, 3);
+
+        const second = await crawlSite(server.url('index.html'), { title: 'string' }, {
+            maxPages: 10, workers: 2, delayMs: 0, checkpointDir,
+        });
+
+        assert.equal(second.pagesExtracted, 3, 'previously-completed pages must still be reported as extracted, with real data');
+        for (const page of second.pages) {
+            assert.equal(page.error, null);
+            assert.equal(page.strategy, 'json-ld');
+            assert.ok(page.data.length > 0, `page ${page.url} should have its real persisted data, not be empty`);
+        }
+    } finally {
+        await server.close();
+    }
+});

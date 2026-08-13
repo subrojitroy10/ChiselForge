@@ -67,8 +67,18 @@ existed independently, tied together for the first time by this module:
    already implemented this generically for a different purpose (frontend
    tech-stack inspection) — direct reuse, not a rewrite.
 2. **`core/worker-loop.js`'s `runWorkerPool`** — gives the crawl
-   checkpointing (resumable — re-running against the same `checkpointDir`
-   skips pages already done), configurable concurrency, and retry, for free.
+   checkpointing, configurable concurrency, and retry, for free. Resumability
+   is opt-in, not automatic: `checkpointDir` defaults to a fresh unique
+   directory every call (`--checkpoint-dir` on the CLI, or
+   `options.checkpointDir` in JS, to deliberately reuse one). This was a real
+   bug initially — a seed-derived deterministic default meant two unrelated
+   invocations against the same URL silently shared state, and since only a
+   boolean "done" marker was persisted (not the actual extracted data), the
+   second run reported the first run's genuinely-successful pages as
+   unprocessed. Fixed by making the default unique-per-call AND persisting
+   full per-page results to disk under `checkpointDir` (not just an in-memory
+   Map), so a deliberately-reused `checkpointDir` reports real data for
+   already-completed pages instead of "not processed."
 3. **`extraction/auto.js`'s `autoExtract`** — the actual per-page extraction,
    unchanged. `crawlSite` fetches each page's HTML once and passes it to
    `autoExtract` via `options.html` (added specifically for this — see that

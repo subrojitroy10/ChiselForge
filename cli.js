@@ -106,7 +106,9 @@ extract options:
 crawl options (all of the above, plus):
   --max-pages <n>                       Page discovery cap (default: 50)
   --workers <n>                         Concurrent pages processed at once (default: 3)
-  --output <dir>                        Write index.json + one file per page here (default: prints index to stdout)
+  --output <dir>                         Write index.json + one file per page here (default: prints index to stdout)
+  --checkpoint-dir <dir>                 Resume a previous crawl by reusing its checkpoint dir (default: a fresh
+                                          unique dir every run — safe by default, not resumable unless you opt in)
 
 shared LLM options:
   --api-key <key>                      LLM API key (falls back to NIM_API_KEY env var)
@@ -224,6 +226,9 @@ async function runCrawl(args) {
     const maxPages = Number(option('--max-pages', 50));
     const workers = Number(option('--workers', 3));
     const outputDir = option('--output', null);
+    // Defaults to a unique dir per run (crawlSite's own default) — pass this
+    // explicitly to opt into resuming a previous crawl instead.
+    const checkpointDir = option('--checkpoint-dir', undefined);
 
     console.log(`Crawling ${seed} (max ${maxPages} pages, ${workers} workers)...\n`);
 
@@ -241,7 +246,7 @@ async function runCrawl(args) {
     let result;
     try {
         result = await crawlSite(seed, schema, {
-            maxPages, workers, onProgress,
+            maxPages, workers, onProgress, checkpointDir,
             extractOptions: { ...sharedLlmOptions(), jsonLdType, renderWithBrowser: renderer.renderWithBrowser },
         });
     } finally {

@@ -11,6 +11,7 @@
 // "why raw text is captured separately" below.
 
 const os = require('os');
+const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
@@ -20,9 +21,45 @@ const { runWorkerPool } = require('../core/worker-loop');
 const { fetchHtml } = require('../transports/http');
 const { htmlToText } = require('../extraction/html-to-text');
 
-function defaultCheckpointDir(seed) {
-    const hash = crypto.createHash('md5').update(seed).digest('hex').slice(0, 12);
-    return path.join(os.tmpdir(), 'chiselforge-crawl', hash);
+// Real bug found via live testing (crawling stron.in twice in a row):
+// checkpointDir used to default to a hash of the seed URL ALONE, so two
+// unrelated CLI invocations against the same URL silently shared state.
+// The second run saw the first run's successful pages as "already
+// checkpointed" and skipped reprocessing them — correct resumability
+// behavior in isolation — but crawlSite only ever persisted a boolean
+// "done" marker (via core/checkpoint.js), never the actual extracted data,
+// so the second run's report had nothing to show for those skipped pages
+// and incorrectly listed them as failed/unprocessed. Fixed two ways:
+// 1. The default checkpointDir is now unique per invocation (timestamp +
+//    random), so accidental cross-run state sharing can't happen unless a
+//    caller deliberately passes the same checkpointDir on purpose.
+// 2. Per-page results are now persisted to disk (not just an in-memory Map)
+//    specifically so that a deliberately-reused checkpointDir produces a
+//    correct report for skipped/already-done pages too.
+function defaultCheckpointDir() {
+    const unique = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    return path.join(os.tmpdir(), 'chiselforge-crawl', unique);
+}
+
+function resultFilePath(checkpointDir, url) {
+    const hash = crypto.createHash('md5').update(url).digest('hex');
+    return path.join(checkpointDir, 'results', `${hash}.json`);
+}
+
+function persistResult(checkpointDir, url, result) {
+    const filePath = resultFilePath(checkpointDir, url);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(result));
+}
+
+function loadPersistedResult(checkpointDir, url) {
+    const filePath = resultFilePath(checkpointDir, url);
+    if (!fs.existsSync(filePath)) return null;
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    } catch (_) {
+        return null;
+    }
 }
 
 /**
@@ -35,7 +72,13 @@ function defaultCheckpointDir(seed) {
  * @param {number} [options.maxPages=50]
  * @param {number} [options.workers=3]
  * @param {number} [options.delayMs=200]   Politeness delay during link discovery
- * @param {string} [options.checkpointDir] Defaults to a per-seed temp dir (resumable across runs with the same seed unless overridden)
+ * @param {string} [options.checkpointDir]
+ *        Defaults to a unique temp dir PER CALL — safe by default, but NOT
+ *        resumable across separate invocations unless you explicitly pass
+ *        the same path back in on a later call. Per-page results are
+ *        persisted to disk here (not just tracked in memory), so a
+ *        deliberately-reused checkpointDir correctly reports previously-
+ *        completed pages, not just "already done, no data available."
  * @param {number} [options.maxRetries=1]
  * @param {object} [options.extractOptions] Forwarded to every autoExtract() call — apiKey, baseUrl, model, jsonLdType, instructions, etc.
  * @param {(event:string, detail?:object)=>void} [options.onProgress]
@@ -58,7 +101,7 @@ async function crawlSite(seed, schema, options = {}) {
         maxPages = 50,
         workers = 3,
         delayMs = 200,
-        checkpointDir = defaultCheckpointDir(seed),
+        checkpointDir = defaultCheckpointDir(),
         maxRetries = 1,
         extractOptions = {},
         onProgress = () => {},
@@ -78,6 +121,11 @@ async function crawlSite(seed, schema, options = {}) {
     const jobs = discovery.pages.map(url => ({ url }));
     const pageResults = new Map();
 
+    function setResult(url, result) {
+        pageResults.set(url, result);
+        persistResult(checkpointDir, url, result);
+    }
+
     await runWorkerPool({
         jobs,
         workerCount: Math.max(1, workers),
@@ -94,7 +142,7 @@ async function crawlSite(seed, schema, options = {}) {
             try {
                 html = (await fetchHtml(job.url, { timeoutMs: 20000 })).html;
             } catch (err) {
-                pageResults.set(job.url, {
+                setResult(job.url, {
                     url: job.url, title: null, rawText: '', data: [],
                     strategy: null, llmUsed: null, browserUsed: null, confidence: null,
                     warnings, error: `fetch failed: ${err.message}`,
@@ -115,7 +163,7 @@ async function crawlSite(seed, schema, options = {}) {
                 extraction = await autoExtract(job.url, schema, { ...extractOptions, html });
             } catch (err) {
                 warnings.push(`extraction failed: ${err.message}`);
-                pageResults.set(job.url, {
+                setResult(job.url, {
                     url: job.url, title, rawText, data: [],
                     strategy: null, llmUsed: null, browserUsed: null, confidence: null,
                     warnings, error: err.message,
@@ -124,7 +172,7 @@ async function crawlSite(seed, schema, options = {}) {
                 throw err;
             }
 
-            pageResults.set(job.url, {
+            setResult(job.url, {
                 url: job.url,
                 title,
                 rawText,
@@ -145,11 +193,18 @@ async function crawlSite(seed, schema, options = {}) {
         },
     });
 
-    const pages = discovery.pages.map(url => pageResults.get(url) || {
-        url, title: null, rawText: '', data: [],
-        strategy: null, llmUsed: null, browserUsed: null, confidence: null,
-        warnings: [], error: 'not processed (worker pool did not report a result)',
-    });
+    // Pages skipped by runWorkerPool because they were already checkpointed
+    // as complete (a deliberately-reused checkpointDir) never call
+    // processJob at all in this run, so they're missing from the in-memory
+    // pageResults Map even though they genuinely succeeded — check the
+    // persisted-to-disk result before falling back to "not processed."
+    const pages = discovery.pages.map(url =>
+        pageResults.get(url) ||
+        loadPersistedResult(checkpointDir, url) || {
+            url, title: null, rawText: '', data: [],
+            strategy: null, llmUsed: null, browserUsed: null, confidence: null,
+            warnings: [], error: 'not processed (worker pool did not report a result)',
+        });
 
     return {
         seed,
