@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const { autoExtract } = require('./extraction/auto');
 const { crawlSite } = require('./crawl/crawlSite');
+const { createBrowserRenderer, DEFAULT_BULK_RESTART_EVERY } = require('./transports/browser');
 
 function option(name, fallback) {
     const i = process.argv.indexOf(name);
@@ -22,62 +23,6 @@ function option(name, fallback) {
 }
 function flag(name) {
     return process.argv.includes(name);
-}
-
-// Anti-detection launch args, ported from the Google-places scraper
-// (Scrapper for open source/Google/worker.js) — a real, proven config, not
-// invented for this. --disable-blink-features=AutomationControlled is the
-// load-bearing one: it hides the navigator.webdriver flag Chromium sets by
-// default, one of the most common headless-automation signals sites check
-// for. Only applied in stealth mode (--render-on-block) — the plain
-// empty-shell fallback isn't an anti-detection scenario, so it stays
-// headless and args-free, same as before.
-const STEALTH_BROWSER_ARGS = [
-    '--disable-dev-shm-usage',
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-blink-features=AutomationControlled',
-    '--start-maximized',
-    '--no-first-run',
-    '--no-default-browser-check',
-];
-
-// Lazily launches ONE shared browser (reused across every page of a crawl,
-// not relaunched per page) and returns a renderWithBrowser(url) function for
-// autoExtract's needsBrowser fallback. playwright is only required here —
-// `extract`/`crawl` runs that never hit a needsBrowser=true page never pay
-// for it. Caller is responsible for calling the returned close() when done.
-//
-// stealth: true launches a real, visible (headless: false) browser with the
-// anti-detection args above — only meaningful for the --render-on-block
-// case, where the whole point is getting past bot-detection that a plain
-// headless launch is more likely to get flagged by.
-function createBrowserRenderer({ stealth = false } = {}) {
-    let browserPromise = null;
-    async function getBrowser() {
-        if (!browserPromise) {
-            const { chromium } = require('playwright');
-            browserPromise = stealth
-                ? chromium.launch({ headless: false, args: STEALTH_BROWSER_ARGS })
-                : chromium.launch({ headless: true });
-        }
-        return browserPromise;
-    }
-    const renderWithBrowser = async (url) => {
-        const browser = await getBrowser();
-        const page = await browser.newPage();
-        try {
-            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            await page.waitForTimeout(1000); // let client-side rendering settle
-            return await page.content();
-        } finally {
-            await page.close();
-        }
-    };
-    const close = async () => {
-        if (browserPromise) { try { await (await browserPromise).close(); } catch (_) {} }
-    };
-    return { renderWithBrowser, close };
 }
 
 const DEFAULT_SCHEMA = {
@@ -138,6 +83,10 @@ crawl options (all of the above, plus):
   --output <dir>                         Write index.json + one file per page here (default: prints index to stdout)
   --checkpoint-dir <dir>                 Resume a previous crawl by reusing its checkpoint dir (default: a fresh
                                           unique dir every run — safe by default, not resumable unless you opt in)
+  --bulk                                 For large crawls (hundreds+ pages) that need browser rendering: restart the
+                                          browser process every 45 renders to release accumulated memory, instead of
+                                          keeping one browser process alive for the whole run. Off by default — a
+                                          normal small crawl doesn't need this, and restarting has a real time cost.
 
 shared LLM options:
   --api-key <key>                      LLM API key (falls back to NIM_API_KEY env var)
@@ -276,7 +225,11 @@ async function runCrawl(args) {
     };
 
     const renderOnBlock = flag('--render-on-block');
-    const renderer = createBrowserRenderer({ stealth: renderOnBlock });
+    const bulk = flag('--bulk');
+    const renderer = createBrowserRenderer({
+        stealth: renderOnBlock,
+        browserRestartEvery: bulk ? DEFAULT_BULK_RESTART_EVERY : undefined,
+    });
     let result;
     try {
         result = await crawlSite(seed, schema, {
