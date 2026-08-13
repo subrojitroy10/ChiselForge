@@ -235,11 +235,17 @@ async function autoExtract(url, schema, options = {}) {
         extractWithLLM(html, schema, {
             ...llmBaseOptions,
             instructions, isHtml: true,
+            // Real-world finding (stron.in, a large rendered SPA page): the
+            // bare 60s default (extraction/llm.js) was not consistently
+            // enough once real content — not the ~40-char empty-shell text
+            // that triggered this in the first place — actually reaches this
+            // tier. Tier 2 already used 120s for the same reason; tier 3 gets
+            // no principled excuse to be shorter, so match it here too.
+            timeoutMs: llmTimeoutMs ?? 120000,
             // Previously hardcoded to extraction/llm.js's defaults with no way
             // to override from autoExtract() — inconsistent with tier 2, which
             // already exposed these. Fixed for symmetry.
             maxTokens: llmMaxTokens,
-            timeoutMs: llmTimeoutMs,
         })
     );
     onStep('extracted', { strategy: 'text', count: items.length });

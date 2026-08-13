@@ -89,7 +89,18 @@ function classifyHtml(html) {
     const hydration = detectHydrationState(html);
     const hasJsonLd = /<script[^>]+type=["']application\/ld\+json["']/i.test(html);
     const visibleTextLength = stripToVisibleText(html).length;
-    const needsBrowser = !hydration && !hasJsonLd && looksLikeEmptyShell(html);
+    // Real bug found via live testing (stron.in, a Vite/React SPA): JSON-LD
+    // presence does NOT imply the page's actual content is server-rendered.
+    // Plenty of SPAs statically inject SEO JSON-LD into an otherwise-empty
+    // index.html shell — <div id="root"></div> plus a <head> full of meta
+    // tags and structured data, with zero real content until JS mounts.
+    // Gating needsBrowser on `!hasJsonLd` meant such a page was wrongly
+    // classified as not needing a browser, which sent ~43 characters of
+    // real content into the text-LLM tier and predictably produced
+    // fabricated/hallucinated output. Hydration state is a legitimate
+    // reason to skip the browser (it IS the real content, no rendering
+    // needed) — JSON-LD presence is not, and the two must not be conflated.
+    const needsBrowser = !hydration && looksLikeEmptyShell(html);
 
     return { needsBrowser, hasJsonLd, hydration, visibleTextLength };
 }

@@ -33,6 +33,17 @@ test('flags needsBrowser for an empty SPA shell', () => {
     assert.equal(c.needsBrowser, true);
 });
 
+test('flags needsBrowser for an empty SPA shell even when JSON-LD is also present', () => {
+    // Real bug, found live against stron.in (a Vite/React SPA): JSON-LD
+    // presence used to short-circuit needsBrowser to false, even for a page
+    // that's an empty <div id="root"></div> shell with SEO JSON-LD
+    // statically injected into <head> and zero real content until JS
+    // mounts. This is a common real-world pattern, not an edge case.
+    const c = classifyHtml(fixture('spa-shell-with-jsonld.html'));
+    assert.equal(c.hasJsonLd, true);
+    assert.equal(c.needsBrowser, true);
+});
+
 test('plain SSR page with real content needs neither browser nor LLM tiers to be assumed', () => {
     const c = classifyHtml(fixture('plain-ssr.html'));
     assert.equal(c.needsBrowser, false);

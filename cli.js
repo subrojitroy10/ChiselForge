@@ -24,6 +24,37 @@ function flag(name) {
     return process.argv.includes(name);
 }
 
+// Lazily launches ONE shared headless browser (reused across every page of a
+// crawl, not relaunched per page) and returns a renderWithBrowser(url) function
+// for autoExtract's needsBrowser fallback. playwright is only required here —
+// `extract`/`crawl` runs that never hit a needsBrowser=true page never pay for
+// it. Caller is responsible for calling the returned close() when done.
+function createBrowserRenderer() {
+    let browserPromise = null;
+    async function getBrowser() {
+        if (!browserPromise) {
+            const { chromium } = require('playwright');
+            browserPromise = chromium.launch({ headless: true });
+        }
+        return browserPromise;
+    }
+    const renderWithBrowser = async (url) => {
+        const browser = await getBrowser();
+        const page = await browser.newPage();
+        try {
+            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await page.waitForTimeout(1000); // let client-side rendering settle
+            return await page.content();
+        } finally {
+            await page.close();
+        }
+    };
+    const close = async () => {
+        if (browserPromise) { try { await (await browserPromise).close(); } catch (_) {} }
+    };
+    return { renderWithBrowser, close };
+}
+
 const DEFAULT_SCHEMA = {
     title: 'string',
     text: 'string',
@@ -83,6 +114,8 @@ shared LLM options:
                                         server, or any other OpenAI-compatible host to switch providers
   --model <model-id>                   LLM model (default: nvidia/llama-3.3-nemotron-super-49b-v1)
   --instructions "<text>"              Extra guidance for the LLM tiers (e.g. "only dining reviews, not delivery")
+  --llm-timeout-ms <n>                 LLM request timeout (default: 120000 — large rendered pages can need it)
+  --llm-max-tokens <n>                 LLM completion token budget (default: 4096, 8192 for the hydration tier)
   --help                               Show this message
 
 Examples:
@@ -112,11 +145,15 @@ const STEP_LABELS = {
 };
 
 function sharedLlmOptions() {
+    const llmTimeoutMs = option('--llm-timeout-ms', undefined);
+    const llmMaxTokens = option('--llm-max-tokens', undefined);
     return {
         apiKey: option('--api-key', process.env.NIM_API_KEY),
         baseUrl: option('--base-url', undefined),
         model: option('--model', undefined),
         instructions: option('--instructions', undefined),
+        llmTimeoutMs: llmTimeoutMs ? Number(llmTimeoutMs) : undefined,
+        llmMaxTokens: llmMaxTokens ? Number(llmMaxTokens) : undefined,
     };
 }
 
@@ -140,11 +177,16 @@ async function runExtract(args) {
         console.log(`  ✓ ${label}`);
     };
 
+    const renderer = createBrowserRenderer();
     let result;
     try {
-        result = await autoExtract(url, schema, { ...sharedLlmOptions(), jsonLdType, onStep });
+        result = await autoExtract(url, schema, {
+            ...sharedLlmOptions(), jsonLdType, onStep,
+            renderWithBrowser: renderer.renderWithBrowser,
+        });
     } catch (err) {
         console.error(`\n✗ Extraction failed: ${err.message}\n`);
+        await renderer.close();
         process.exit(1);
     }
 
@@ -162,6 +204,8 @@ async function runExtract(args) {
     } else {
         console.log('\n' + JSON.stringify(result, null, 2));
     }
+
+    await renderer.close();
 }
 
 function slugForUrl(url) {
@@ -193,10 +237,16 @@ async function runCrawl(args) {
         }
     };
 
-    const result = await crawlSite(seed, schema, {
-        maxPages, workers, onProgress,
-        extractOptions: { ...sharedLlmOptions(), jsonLdType },
-    });
+    const renderer = createBrowserRenderer();
+    let result;
+    try {
+        result = await crawlSite(seed, schema, {
+            maxPages, workers, onProgress,
+            extractOptions: { ...sharedLlmOptions(), jsonLdType, renderWithBrowser: renderer.renderWithBrowser },
+        });
+    } finally {
+        await renderer.close();
+    }
 
     const index = {
         seed: result.seed,
