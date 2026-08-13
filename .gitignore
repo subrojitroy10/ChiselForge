@@ -8,3 +8,6 @@ logs/
 .env
 .env.local
 api keys.txt
+DISTRIBUTION.md
+ROADMAP.md
+distribution-materials/
