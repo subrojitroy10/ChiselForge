@@ -4,7 +4,7 @@
   "description": "Extract structured data from webpages without writing a scraper. Deterministic extraction first (JSON-LD, hydration state) — LLM only when necessary. Plus a resumable multi-worker job-running engine underneath for serious scraping infrastructure.",
   "main": "index.js",
   "bin": {
-    "chiselforge": "./cli.js"
+    "chiselforge": "cli.js"
   },
   "license": "Apache-2.0",
   "engines": {
