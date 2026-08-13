@@ -112,6 +112,8 @@ async function crawlSite(seed, schema, options = {}) {
     const discovery = await discoverPages(seed, {
         maxPages, delayMs,
         onPage: (url, count) => onProgress('discovery-page', { url, count }),
+        renderWithBrowser: extractOptions.renderWithBrowser,
+        renderOnBlock: extractOptions.renderOnBlock,
     });
     onProgress('discovered', {
         pageCount: discovery.pages.length,

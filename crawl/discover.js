@@ -8,6 +8,7 @@
 // anywhere in this file.
 
 const { URL } = require('url');
+const { BOT_BLOCK_STATUSES } = require('../transports/http');
 
 function normalize(input, base) {
     try {
@@ -44,7 +45,16 @@ function xmlLocations(xml) {
             .replace(/&#39;/g, "'"));
 }
 
-async function fetchText(url, timeoutMs) {
+// Real gap found live (crawling lovable.dev): this fetcher used to throw on
+// ANY non-2xx status, same bug transports/http.js's fetchHtml had before its
+// own fix. The link-crawl BFS walks real HTML pages one at a time — exactly
+// where a bot-detection block is most likely to show up — so it needs the
+// same opt-in bypass-attempt path, not just crawlSite.js's per-page fetch.
+// Sitemap/robots.txt fetching (below) deliberately does NOT get this
+// treatment: those are XML/text files meant for bots, rendering them with a
+// browser wouldn't do anything useful, and in practice they weren't blocked
+// even when the seed HTML page was.
+async function fetchText(url, timeoutMs, { allowBotBlockFallback = false } = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -53,8 +63,9 @@ async function fetchText(url, timeoutMs) {
             signal: controller.signal,
             headers: { 'accept-encoding': 'identity', 'user-agent': 'Mozilla/5.0 ChiselForgeCrawler/1.0' },
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return { body: await response.text(), type: response.headers.get('content-type') || '' };
+        const isBotBlockFallbackCase = allowBotBlockFallback && BOT_BLOCK_STATUSES.has(response.status);
+        if (!response.ok && !isBotBlockFallbackCase) throw new Error(`HTTP ${response.status}`);
+        return { status: response.status, body: await response.text(), type: response.headers.get('content-type') || '' };
     } finally {
         clearTimeout(timer);
     }
@@ -103,7 +114,7 @@ async function discoverFromSitemaps(seed, { maxPages, timeoutMs, allowedHost }) 
     return [...pages];
 }
 
-async function crawlLinks(seed, { maxPages, timeoutMs, delayMs, allowedHost, onPage }) {
+async function crawlLinks(seed, { maxPages, timeoutMs, delayMs, allowedHost, onPage, renderWithBrowser, renderOnBlock = false }) {
     const pages = new Set([seed]);
     const queue = [seed];
     const failures = [];
@@ -111,7 +122,11 @@ async function crawlLinks(seed, { maxPages, timeoutMs, delayMs, allowedHost, onP
     while (queue.length && pages.size < maxPages) {
         const page = queue.shift();
         try {
-            const { body, type } = await fetchText(page, timeoutMs);
+            let { body, type, status } = await fetchText(page, timeoutMs, { allowBotBlockFallback: renderOnBlock });
+            if (renderOnBlock && BOT_BLOCK_STATUSES.has(status) && renderWithBrowser) {
+                body = await renderWithBrowser(page);
+                type = 'text/html';
+            }
             if (type && !type.includes('html')) continue;
             onPage?.(page, pages.size);
             for (const match of body.matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"']+)["']/gi)) {
@@ -140,14 +155,23 @@ async function crawlLinks(seed, { maxPages, timeoutMs, delayMs, allowedHost, onP
  * @param {number} [options.timeoutMs=20000]
  * @param {number} [options.delayMs=200]     Delay between crawl requests — be a polite crawler
  * @param {(url:string, count:number)=>void} [options.onPage]  Progress callback during the link crawl
+ * @param {Function} [options.renderWithBrowser]
+ *        Optional `(url) => Promise<html>` — see extraction/auto.js. Only
+ *        used by the link-crawl BFS when options.renderOnBlock is also true.
+ * @param {boolean} [options.renderOnBlock=false]
+ *        Off by default — see transports/http.js's BOT_BLOCK_STATUSES and
+ *        extraction/auto.js's renderOnBlock for why this stays opt-in. When
+ *        true, a bot-block-shaped response (403/429/503) during the
+ *        link-crawl BFS triggers a browser-render attempt instead of
+ *        immediately recording a discovery failure for that page.
  * @returns {Promise<{ pages: string[], sitemapPageCount: number, crawledPageCount: number, failures: Array<{url:string, error:string}> }>}
  */
 async function discoverPages(seed, options = {}) {
-    const { maxPages = 50, timeoutMs = 20000, delayMs = 200, onPage } = options;
+    const { maxPages = 50, timeoutMs = 20000, delayMs = 200, onPage, renderWithBrowser, renderOnBlock = false } = options;
     const allowedHost = new URL(seed).hostname;
 
     const sitemapPages = await discoverFromSitemaps(seed, { maxPages, timeoutMs, allowedHost });
-    const { pages: crawledPages, failures } = await crawlLinks(seed, { maxPages, timeoutMs, delayMs, allowedHost, onPage });
+    const { pages: crawledPages, failures } = await crawlLinks(seed, { maxPages, timeoutMs, delayMs, allowedHost, onPage, renderWithBrowser, renderOnBlock });
 
     const pages = [...new Set([seed, ...sitemapPages, ...crawledPages])].slice(0, maxPages);
 
