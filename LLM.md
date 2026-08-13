@@ -45,16 +45,42 @@ Nemotron model or confirm your key's actual scope with NVIDIA.
 
 ## Using a different provider
 
+This works the same way whether you call `extractWithLLM` directly or go
+through the documented `autoExtract()` API or the CLI — `baseUrl` is
+forwarded end-to-end, not just accepted by `extraction/llm.js` in isolation
+(verified by a committed test, `test/llm-provider-swap.test.js`, that
+proves a request made through `autoExtract()` actually lands on a custom
+endpoint with the custom model name intact).
+
 ```js
+// Low-level
 await extractWithLLM(pageHtml, schema, {
+    apiKey: process.env.OPENAI_API_KEY,
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+});
+
+// Through autoExtract() — same options, same effect
+await autoExtract(url, schema, {
     apiKey: process.env.OPENAI_API_KEY,
     baseUrl: 'https://api.openai.com/v1',
     model: 'gpt-4o-mini',
 });
 ```
 
+```bash
+# CLI
+chiselforge extract <url> --schema "..." \
+  --base-url https://api.openai.com/v1 --model gpt-4o-mini --api-key "$OPENAI_API_KEY"
+```
+
 Any endpoint implementing the same `/chat/completions` shape works
 identically — a local Ollama server, OpenRouter, Together, etc.
+
+`llmMaxTokens` and `llmTimeoutMs` are also forwarded consistently across
+both LLM tiers (hydration and text) through `autoExtract()` — previously
+only the hydration tier exposed these, an asymmetry found and fixed
+alongside the `baseUrl` gap.
 
 ## Reliability notes from real testing
 

@@ -68,6 +68,8 @@ Options:
   --json-ld-type <Type>                Only accept JSON-LD blocks of this schema.org @type (e.g. "Review")
   --output <path.json>                 Write result here (default: prints to stdout)
   --api-key <key>                      LLM API key (falls back to NIM_API_KEY env var)
+  --base-url <url>                     LLM endpoint (default: NVIDIA NIM) — point at OpenAI, a local Ollama
+                                        server, or any other OpenAI-compatible host to switch providers
   --model <model-id>                   LLM model (default: nvidia/llama-3.3-nemotron-super-49b-v1)
   --instructions "<text>"              Extra guidance for the LLM tiers (e.g. "only dining reviews, not delivery")
   --verbose                            Show every pipeline step, not just the summary
@@ -120,6 +122,7 @@ async function main() {
     const schema = loadSchema();
     const jsonLdType = option('--json-ld-type', undefined);
     const apiKey = option('--api-key', process.env.NIM_API_KEY);
+    const baseUrl = option('--base-url', undefined);
     const model = option('--model', undefined);
     const instructions = option('--instructions', undefined);
     const outputPath = option('--output', null);
@@ -134,7 +137,7 @@ async function main() {
 
     let result;
     try {
-        result = await autoExtract(url, schema, { apiKey, model, jsonLdType, instructions, onStep });
+        result = await autoExtract(url, schema, { apiKey, baseUrl, model, jsonLdType, instructions, onStep });
     } catch (err) {
         console.error(`\n✗ Extraction failed: ${err.message}\n`);
         process.exit(1);

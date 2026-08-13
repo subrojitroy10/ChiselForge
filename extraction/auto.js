@@ -51,8 +51,14 @@ async function extractWithRetryOnEmpty(fn, attempts = 2) {
  * @param {object} schema                 Shape to extract, e.g. { author: "string", text: "string", rating: "number" }
  * @param {object} [options]
  * @param {string} [options.apiKey]        LLM key — see extraction/llm.js. Falls back to NIM_API_KEY env var.
+ * @param {string} [options.baseUrl]       LLM endpoint — see extraction/llm.js. Defaults to NVIDIA NIM. Point this
+ *                                          at OpenAI, a local Ollama server, or any other OpenAI-compatible host to
+ *                                          swap providers — this is the actual plug-in/plug-out point, not just a
+ *                                          config value read by extraction/llm.js in isolation.
  * @param {string} [options.model]         Passed through to extraction/llm.js
  * @param {string} [options.instructions]  Passed through to extraction/llm.js
+ * @param {number} [options.llmMaxTokens]  Completion token budget for BOTH LLM tiers (hydration and text) — see extraction/llm.js
+ * @param {number} [options.llmTimeoutMs]  Request timeout for BOTH LLM tiers
  * @param {string} [options.jsonLdType]
  *        Optional schema.org @type to filter tier-1 results by (e.g. "Review").
  *        A page can carry JSON-LD that's real but irrelevant to what you asked
@@ -71,8 +77,7 @@ async function extractWithRetryOnEmpty(fn, attempts = 2) {
  *        omitted and a browser turns out to be required, this throws with a
  *        clear message rather than silently returning nothing.
  * @param {number} [options.httpTimeoutMs]
- * @param {number} [options.hydrationMaxChars]
- * @param {number} [options.llmTimeoutMs]
+ * @param {number} [options.hydrationMaxChars] Tier-2-specific — see extraction/llm.js's `maxChars`
  * @param {(step:string, detail?:object)=>void} [options.onStep]
  *        Optional progress callback — fired once per pipeline step, in order.
  *        Used by cli.js to render the ✓ checklist; harmless to ignore otherwise.
@@ -92,9 +97,15 @@ async function extractWithRetryOnEmpty(fn, attempts = 2) {
  */
 async function autoExtract(url, schema, options = {}) {
     const {
-        apiKey, model, instructions, jsonLdType, renderWithBrowser,
+        apiKey, baseUrl, model, instructions, jsonLdType, renderWithBrowser,
+        llmMaxTokens, llmTimeoutMs,
         httpTimeoutMs = 30000, onStep = () => {},
     } = options;
+    // Passed to every extractWithLLM() call site below — this is what
+    // actually makes provider-swapping (NIM/OpenAI/local Ollama/etc.) work
+    // through the public autoExtract() API, not just through extraction/llm.js
+    // directly.
+    const llmBaseOptions = { apiKey, baseUrl, model };
 
     onStep('fetching', { url });
     const { html: rawHtml } = await fetchHtml(url, { timeoutMs: httpTimeoutMs });
@@ -192,14 +203,15 @@ async function autoExtract(url, schema, options = {}) {
             JSON.stringify(classification.hydration.state),
             schema,
             {
-                apiKey, model, instructions: hydrationInstructions, isHtml: false,
+                ...llmBaseOptions,
+                instructions: hydrationInstructions, isHtml: false,
                 maxChars: options.hydrationMaxChars ?? 60000,
                 // Larger prompts take longer, especially on reasoning models —
                 // the 60s default (tuned for small prompts) isn't enough here.
-                timeoutMs: options.llmTimeoutMs ?? 120000,
+                timeoutMs: llmTimeoutMs ?? 120000,
                 // Multiple full-text items (e.g. several reviews) can easily
                 // exceed the 4096-token default — give this tier more room.
-                maxTokens: options.llmMaxTokens ?? 8192,
+                maxTokens: llmMaxTokens ?? 8192,
             }
         ));
         onStep('extracted', { strategy: 'hydration', count: items.length });
@@ -210,7 +222,15 @@ async function autoExtract(url, schema, options = {}) {
     // hand the LLM the page's visible text cold.
     onStep('extracting', { strategy: 'text' });
     const items = await extractWithRetryOnEmpty(() =>
-        extractWithLLM(html, schema, { apiKey, model, instructions, isHtml: true })
+        extractWithLLM(html, schema, {
+            ...llmBaseOptions,
+            instructions, isHtml: true,
+            // Previously hardcoded to extraction/llm.js's defaults with no way
+            // to override from autoExtract() — inconsistent with tier 2, which
+            // already exposed these. Fixed for symmetry.
+            maxTokens: llmMaxTokens,
+            timeoutMs: llmTimeoutMs,
+        })
     );
     onStep('extracted', { strategy: 'text', count: items.length });
     return finish('text', items);
