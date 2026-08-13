@@ -16,14 +16,20 @@ function jitter(baseMs, jitterMs) { return baseMs + Math.floor(Math.random() * j
 
 // Statuses commonly returned by bot-detection/WAF layers (Cloudflare, etc.)
 // rather than by the page genuinely not existing or not being permitted.
-// fetchHtml treats these as "try a browser" signals (see classify.js) instead
-// of hard failures — a real browser (real TLS/JS fingerprint, cookies) can
-// sometimes get past a check that blocks a bare fetch() outright. Found via
-// live testing: a plain fetch() to a bot-protected site returned 403 before
-// autoExtract ever got a chance to consider the browser-render fallback,
-// because this function used to throw on ANY non-2xx status. Other non-2xx
-// statuses (404, 401, 500, ...) are not bot-block signals — rendering with a
-// browser wouldn't fix "page doesn't exist" — so those still throw.
+// When options.allowBotBlockFallback is explicitly set (see fetchHtml
+// below), these are treated as "try a browser" signals (see classify.js)
+// instead of hard failures — a real browser (real TLS/JS fingerprint,
+// cookies) can sometimes get past a check that blocks a bare fetch()
+// outright. Found via live testing against a bot-protected site. Other
+// non-2xx statuses (404, 401, 500, ...) are never treated this way —
+// rendering with a browser wouldn't fix "page doesn't exist" — those always
+// throw regardless of this option.
+//
+// This is opt-in, not the default: attempting to get past bot-detection is
+// a real behavioral choice (unlike "render JS when a page needs it," which
+// is a neutral engineering default), so the plain-fetch behavior of
+// treating any non-2xx as a hard failure is preserved unless a caller
+// deliberately asks for the bypass attempt.
 const BOT_BLOCK_STATUSES = new Set([403, 429, 503]);
 
 const DEFAULT_USER_AGENTS = [
@@ -41,6 +47,11 @@ const DEFAULT_USER_AGENTS = [
  * @param {string[]} [options.userAgents]   Defaults to DEFAULT_USER_AGENTS
  * @param {string} [options.proxyUrl]       e.g. "http://user:pass@host:port" (see core/proxy-pool.js)
  * @param {object} [options.headers]        Extra/override headers
+ * @param {boolean} [options.allowBotBlockFallback=false]
+ *        When true, a bot-block-shaped status (see BOT_BLOCK_STATUSES) is
+ *        returned normally instead of throwing, so the caller can attempt a
+ *        browser render as a fallback. Off by default — see the comment on
+ *        BOT_BLOCK_STATUSES for why this stays opt-in.
  * @returns {Promise<{ status:number, html:string }>}
  */
 async function fetchHtml(url, options = {}) {
@@ -49,6 +60,7 @@ async function fetchHtml(url, options = {}) {
         userAgents = DEFAULT_USER_AGENTS,
         proxyUrl = null,
         headers = {},
+        allowBotBlockFallback = false,
     } = options;
 
     const controller = new AbortController();
@@ -73,7 +85,8 @@ async function fetchHtml(url, options = {}) {
 
     try {
         const response = await fetch(url, fetchOptions);
-        if (!response.ok && !BOT_BLOCK_STATUSES.has(response.status)) {
+        const isBotBlockFallbackCase = allowBotBlockFallback && BOT_BLOCK_STATUSES.has(response.status);
+        if (!response.ok && !isBotBlockFallbackCase) {
             throw new Error(`HTTP ${response.status}`);
         }
         return { status: response.status, html: await response.text() };

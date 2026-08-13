@@ -101,6 +101,9 @@ extract options:
   --schema-file <path.json>            Schema as a JSON file: { "name": "string", "price": "number" }
   --json-ld-type <Type>                Only accept JSON-LD blocks of this schema.org @type (e.g. "Review")
   --output <path.json>                 Write result here (default: prints to stdout)
+  --render-on-block                    If a page is blocked (HTTP 403/429/503, typical of bot-detection), try
+                                        rendering it with a real browser before giving up. Off by default — this is a
+                                        deliberate choice to attempt bypassing anti-bot checks, not a neutral default.
   --verbose                            Show every pipeline step, not just the summary
 
 crawl options (all of the above, plus):
@@ -187,6 +190,7 @@ async function runExtract(args) {
         result = await autoExtract(url, schema, {
             ...sharedLlmOptions(), jsonLdType, onStep,
             renderWithBrowser: renderer.renderWithBrowser,
+            renderOnBlock: flag('--render-on-block'),
         });
     } catch (err) {
         console.error(`\n✗ Extraction failed: ${err.message}\n`);
@@ -249,7 +253,11 @@ async function runCrawl(args) {
     try {
         result = await crawlSite(seed, schema, {
             maxPages, workers, onProgress, checkpointDir,
-            extractOptions: { ...sharedLlmOptions(), jsonLdType, renderWithBrowser: renderer.renderWithBrowser },
+            extractOptions: {
+                ...sharedLlmOptions(), jsonLdType,
+                renderWithBrowser: renderer.renderWithBrowser,
+                renderOnBlock: flag('--render-on-block'),
+            },
         });
     } finally {
         await renderer.close();

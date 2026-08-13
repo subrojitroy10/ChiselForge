@@ -142,7 +142,10 @@ async function crawlSite(seed, schema, options = {}) {
             let html;
             let httpStatus;
             try {
-                const fetched = await fetchHtml(job.url, { timeoutMs: 20000 });
+                const fetched = await fetchHtml(job.url, {
+                    timeoutMs: 20000,
+                    allowBotBlockFallback: extractOptions.renderOnBlock,
+                });
                 html = fetched.html;
                 httpStatus = fetched.status;
             } catch (err) {

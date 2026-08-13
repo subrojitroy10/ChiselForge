@@ -70,6 +70,15 @@ async function extractWithRetryOnEmpty(fn, attempts = 2) {
  *        block's own keys plausibly match your schema before accepting it —
  *        best-effort, not exact, but meaningfully better than accepting any
  *        JSON-LD present regardless of relevance.
+ * @param {boolean} [options.renderOnBlock=false]
+ *        Off by default. When true, a bot-block-shaped response (403, 429,
+ *        503 — see transports/http.js's BOT_BLOCK_STATUSES) is treated as
+ *        its own needsBrowser signal instead of throwing immediately, so a
+ *        real browser render is attempted before giving up. This is a
+ *        deliberate opt-in, not a default: attempting to get past
+ *        bot-detection is a real behavioral choice, unlike rendering JS for
+ *        a page that plainly needs it. Requires renderWithBrowser to also
+ *        be supplied, same as the empty-shell needsBrowser case.
  * @param {Function} [options.renderWithBrowser]
  *        Optional `(url) => Promise<html>` — supply this to handle the
  *        needsBrowser=true case (this module doesn't launch a browser itself,
@@ -99,7 +108,7 @@ async function extractWithRetryOnEmpty(fn, attempts = 2) {
 async function autoExtract(url, schema, options = {}) {
     const {
         apiKey, baseUrl, model, instructions, jsonLdType, renderWithBrowser,
-        llmMaxTokens, llmTimeoutMs,
+        llmMaxTokens, llmTimeoutMs, renderOnBlock = false,
         httpTimeoutMs = 30000, onStep = () => {},
     } = options;
     // Passed to every extractWithLLM() call site below — this is what
@@ -119,7 +128,7 @@ async function autoExtract(url, schema, options = {}) {
         html = options.html;
     } else {
         onStep('fetching', { url });
-        const fetched = await fetchHtml(url, { timeoutMs: httpTimeoutMs });
+        const fetched = await fetchHtml(url, { timeoutMs: httpTimeoutMs, allowBotBlockFallback: renderOnBlock });
         html = fetched.html;
         httpStatus = fetched.status;
     }
