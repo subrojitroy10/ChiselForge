@@ -113,14 +113,17 @@ async function autoExtract(url, schema, options = {}) {
     // it in directly to avoid a redundant second fetch — the tier logic below
     // is identical either way.
     let html;
+    let httpStatus;
     if (options.html != null) {
         onStep('fetching', { url, reused: true });
         html = options.html;
     } else {
         onStep('fetching', { url });
-        html = (await fetchHtml(url, { timeoutMs: httpTimeoutMs })).html;
+        const fetched = await fetchHtml(url, { timeoutMs: httpTimeoutMs });
+        html = fetched.html;
+        httpStatus = fetched.status;
     }
-    let classification = classifyHtml(html);
+    let classification = classifyHtml(html, { status: httpStatus });
     let browserUsed = false;
     onStep('classified', classification);
 

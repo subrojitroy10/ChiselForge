@@ -14,6 +14,18 @@ function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 function randomItem(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function jitter(baseMs, jitterMs) { return baseMs + Math.floor(Math.random() * jitterMs); }
 
+// Statuses commonly returned by bot-detection/WAF layers (Cloudflare, etc.)
+// rather than by the page genuinely not existing or not being permitted.
+// fetchHtml treats these as "try a browser" signals (see classify.js) instead
+// of hard failures — a real browser (real TLS/JS fingerprint, cookies) can
+// sometimes get past a check that blocks a bare fetch() outright. Found via
+// live testing: a plain fetch() to a bot-protected site returned 403 before
+// autoExtract ever got a chance to consider the browser-render fallback,
+// because this function used to throw on ANY non-2xx status. Other non-2xx
+// statuses (404, 401, 500, ...) are not bot-block signals — rendering with a
+// browser wouldn't fix "page doesn't exist" — so those still throw.
+const BOT_BLOCK_STATUSES = new Set([403, 429, 503]);
+
 const DEFAULT_USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36',
@@ -61,7 +73,9 @@ async function fetchHtml(url, options = {}) {
 
     try {
         const response = await fetch(url, fetchOptions);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok && !BOT_BLOCK_STATUSES.has(response.status)) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         return { status: response.status, html: await response.text() };
     } finally {
         clearTimeout(timer);
@@ -74,4 +88,5 @@ module.exports = {
     jitter,
     randomItem,
     DEFAULT_USER_AGENTS,
+    BOT_BLOCK_STATUSES,
 };

@@ -12,6 +12,8 @@
 // hydration-state vs DOM/JSON-LD). It does not know WHAT the data means —
 // see extraction/auto.js for how this feeds into the extraction tier chain.
 
+const { BOT_BLOCK_STATUSES } = require('../transports/http');
+
 const KNOWN_HYDRATION_GLOBALS = [
     '__PRELOADED_STATE__',   // Zomato and others
     '__NUXT__',              // Nuxt/Vue
@@ -78,17 +80,26 @@ function looksLikeEmptyShell(html) {
 
 /**
  * @param {string} html   Raw HTML from a plain HTTP fetch (no browser)
+ * @param {object} [options]
+ * @param {number} [options.status]
+ *        HTTP status of the response `html` came from, if known (see
+ *        transports/http.js's fetchHtml). A bot-block-shaped status (403,
+ *        429, 503) is treated as its own needsBrowser signal, independent of
+ *        what the response body looks like — see BOT_BLOCK_STATUSES.
  * @returns {{
  *   needsBrowser: boolean,
  *   hasJsonLd: boolean,
  *   hydration: { key: string, state: object } | null,
- *   visibleTextLength: number
+ *   visibleTextLength: number,
+ *   blockedStatus: number | null
  * }}
  */
-function classifyHtml(html) {
+function classifyHtml(html, options = {}) {
+    const { status } = options;
     const hydration = detectHydrationState(html);
     const hasJsonLd = /<script[^>]+type=["']application\/ld\+json["']/i.test(html);
     const visibleTextLength = stripToVisibleText(html).length;
+    const blockedStatus = status != null && BOT_BLOCK_STATUSES.has(status) ? status : null;
     // Real bug found via live testing (stron.in, a Vite/React SPA): JSON-LD
     // presence does NOT imply the page's actual content is server-rendered.
     // Plenty of SPAs statically inject SEO JSON-LD into an otherwise-empty
@@ -100,9 +111,14 @@ function classifyHtml(html) {
     // fabricated/hallucinated output. Hydration state is a legitimate
     // reason to skip the browser (it IS the real content, no rendering
     // needed) — JSON-LD presence is not, and the two must not be conflated.
-    const needsBrowser = !hydration && looksLikeEmptyShell(html);
+    //
+    // Second real gap found live (lovable.dev, bot-protected): a 403/429/503
+    // response is not an "empty shell" by looksLikeEmptyShell's heuristic —
+    // it's a whole different problem (blocked, not merely unrendered) — so it
+    // needs its own signal here rather than relying on the body shape.
+    const needsBrowser = !hydration && (looksLikeEmptyShell(html) || blockedStatus !== null);
 
-    return { needsBrowser, hasJsonLd, hydration, visibleTextLength };
+    return { needsBrowser, hasJsonLd, hydration, visibleTextLength, blockedStatus };
 }
 
 module.exports = {

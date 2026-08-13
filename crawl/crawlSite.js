@@ -140,8 +140,11 @@ async function crawlSite(seed, schema, options = {}) {
             const warnings = [];
 
             let html;
+            let httpStatus;
             try {
-                html = (await fetchHtml(job.url, { timeoutMs: 20000 })).html;
+                const fetched = await fetchHtml(job.url, { timeoutMs: 20000 });
+                html = fetched.html;
+                httpStatus = fetched.status;
             } catch (err) {
                 setResult(job.url, {
                     url: job.url, title: null, rawText: '', data: [],
@@ -160,7 +163,7 @@ async function crawlSite(seed, schema, options = {}) {
             // so it reflects whatever content autoExtract will actually see.
             // The resolved html is then passed into autoExtract via
             // options.html so it doesn't re-render a second time.
-            if (classifyHtml(html).needsBrowser && extractOptions.renderWithBrowser) {
+            if (classifyHtml(html, { status: httpStatus }).needsBrowser && extractOptions.renderWithBrowser) {
                 html = await extractOptions.renderWithBrowser(job.url);
             }
 

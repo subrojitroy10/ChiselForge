@@ -134,9 +134,11 @@ const STEP_LABELS = {
         ? `Detected hydration state (${c.hydration.key})`
         : c.hasJsonLd
             ? 'Detected JSON-LD structured data'
-            : c.needsBrowser
-                ? 'Page appears to need a browser (empty SPA shell)'
-                : 'Classified as plain server-rendered page',
+            : c.blockedStatus
+                ? `Blocked with HTTP ${c.blockedStatus} — will attempt browser render`
+                : c.needsBrowser
+                    ? 'Page appears to need a browser (empty SPA shell)'
+                    : 'Classified as plain server-rendered page',
     'rendering-with-browser': () => 'Rendering with browser',
     'json-ld-irrelevant': d => `JSON-LD found (${d.blocksFound} block(s)) but none matched — escalating`,
     extracting: d => `Extracting via ${d.strategy} tier`,
