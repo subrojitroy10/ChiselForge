@@ -99,6 +99,9 @@ export interface CrawlSiteOptions {
     /** Defaults to a unique temp dir per call — pass the same path back in to resume. */
     checkpointDir?: string;
     maxRetries?: number;
+    /** Forwarded to runWorkerPool — delay after a failed page, before retrying/continuing. Defaults to runWorkerPool's own default (20-40s) if unset. */
+    errorBackoffMinMs?: number;
+    errorBackoffMaxMs?: number;
     /** On by default — see DiscoverPagesOptions.respectRobots. */
     respectRobots?: boolean;
     /** Forwarded to every autoExtract() call — apiKey, baseUrl, model, jsonLdType, instructions, etc. */

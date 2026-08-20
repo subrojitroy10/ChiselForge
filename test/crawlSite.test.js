@@ -167,6 +167,86 @@ test('a page that required browser rendering reports browserUsed: true, not fals
     }
 });
 
+// Regression test for a real gap: the renderWithBrowser() call inside
+// crawlSite.js's processJob was unguarded — a thrown renderer ("renderer
+// exploded") propagated straight out of processJob without ever calling
+// setResult() for that URL. With no entry in pageResults and nothing
+// persisted, the final report fell through to the generic "not processed
+// (worker pool did not report a result)" fallback, losing the real reason
+// the page failed. Fixed by wrapping the render call in its own try/catch
+// that persists the actual failure before rethrowing (same pattern already
+// used for the fetch-failure and extraction-failure cases in this file).
+test('a renderWithBrowser() that throws preserves the real error in the crawl report, not a generic fallback', async () => {
+    const server = await startLocalServer(path.join(__dirname, '..', 'benchmark', 'fixtures'));
+    const checkpointDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chiselforge-crawl-render-error-'));
+
+    try {
+        const result = await crawlSite(server.url('spa-product.html'), { name: 'string' }, {
+            maxPages: 1, workers: 1, delayMs: 0, checkpointDir,
+            maxRetries: 0, // isolate the failure-preservation behavior from retry mechanics (covered separately below)
+            // runWorkerPool sleeps errorBackoffMinMs..MaxMs after every
+            // failed attempt regardless of whether it's retried or given up
+            // (default 20-40s) — turned down so this test doesn't sit there.
+            errorBackoffMinMs: 10, errorBackoffMaxMs: 30,
+            extractOptions: {
+                renderWithBrowser: async () => { throw new Error('renderer exploded'); },
+            },
+        });
+
+        assert.equal(result.pagesFailed, 1, 'the page should be counted as failed');
+        assert.equal(result.pagesExtracted, 0);
+        assert.equal(result.pages.length, 1);
+
+        const page = result.pages[0];
+        assert.equal(page.url, server.url('spa-product.html'), 'the URL must still be preserved');
+        assert.equal(page.error, 'render failed: renderer exploded', `expected the real render error, got: ${JSON.stringify(page.error)}`);
+        assert.notEqual(page.error, 'not processed (worker pool did not report a result)', 'must not fall back to the generic unprocessed message');
+        assert.ok(page.warnings.includes('render failed: renderer exploded'), 'warnings should also record the failure');
+    } finally {
+        await server.close();
+    }
+});
+
+// Same failure, but proves retries still work normally around it: the
+// renderer fails on its first attempt and succeeds on the second (a real,
+// plausible transient-failure shape), and runWorkerPool's retry — driven by
+// maxRetries here, not a code path this fix touches — recovers correctly,
+// ending with a real successful result rather than the persisted failure
+// from the first attempt.
+test('a renderWithBrowser() that fails once and succeeds on retry still produces a real successful result', async () => {
+    const RENDERED_HTML = `<html><body>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Recovered After Retry"}</script>
+</body></html>`;
+    const server = await startLocalServer(path.join(__dirname, '..', 'benchmark', 'fixtures'));
+    const checkpointDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chiselforge-crawl-render-retry-'));
+
+    try {
+        let attempts = 0;
+        const renderWithBrowser = async () => {
+            attempts++;
+            if (attempts === 1) throw new Error('transient renderer crash');
+            return RENDERED_HTML;
+        };
+
+        const result = await crawlSite(server.url('spa-product.html'), { name: 'string' }, {
+            maxPages: 1, workers: 1, delayMs: 0, checkpointDir,
+            maxRetries: 1,
+            // Turned down from runWorkerPool's real-world 20-40s default —
+            // this test only needs the retry to happen, not to happen slowly.
+            errorBackoffMinMs: 10, errorBackoffMaxMs: 30,
+            extractOptions: { renderWithBrowser },
+        });
+
+        assert.equal(attempts, 2, 'renderWithBrowser should have been called twice (fail, then retry succeeds)');
+        assert.equal(result.pagesExtracted, 1, 'the retried job should ultimately succeed');
+        assert.equal(result.pagesFailed, 0);
+        assert.equal(result.pages[0].error, null, 'the final result must be the successful retry, not the earlier failure');
+        assert.equal(result.pages[0].data[0].name, 'Recovered After Retry');
+    } finally {
+        await server.close();
+    }
+});
+
 // When a checkpointDir IS deliberately reused, previously-completed pages
 // must report their real persisted data, not "not processed."
 test('reusing checkpointDir on purpose correctly reports previously-completed pages with real data, not as unprocessed', async () => {

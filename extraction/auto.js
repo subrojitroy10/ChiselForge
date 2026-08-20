@@ -208,19 +208,28 @@ async function autoExtract(url, schema, options = {}) {
             // Relevant JSON-LD isn't automatically USABLE JSON-LD — a block
             // can match the schema's field names (or the exact @type) and
             // still not carry every field the caller asked for (e.g. a
-            // Product block with name/price but no rating). Returning it
-            // anyway would silently answer a narrower question than the one
-            // asked, which contradicts "escalate only when the cheaper tier
-            // can't actually answer the request." Only short-circuit here if
-            // at least one item genuinely validates against the schema —
-            // otherwise fall through to the LLM-backed tiers below, same as
-            // the "present but irrelevant" case.
+            // Product block with name/price but no rating), and with
+            // multiple JSON-LD records, some can validate while others don't
+            // (e.g. [{name,price}, {name}] against a name+price schema).
+            // Returning a partially-valid set anyway would silently violate
+            // this project's own "URL + schema -> validated structured data"
+            // contract — the caller asked for a schema, not "whatever
+            // fraction of it JSON-LD happened to have." Only short-circuit
+            // here when EVERY relevant item validates — otherwise fall
+            // through to the LLM-backed tiers below, same as the "present
+            // but irrelevant" case. There is no partial-acceptance mode;
+            // silently dropping the invalid records instead of escalating
+            // would just be a different way of answering a narrower
+            // question than the one asked.
             const jsonLdValidation = validateItems(relevant, schema);
-            if (jsonLdValidation.validItems > 0) {
+            if (jsonLdValidation.valid) {
                 onStep('extracted', { strategy: 'json-ld', count: relevant.length });
                 return finish('json-ld', relevant);
             }
-            onStep('json-ld-invalid', { blocksFound: blocks.length, itemsFound: relevant.length });
+            onStep('json-ld-invalid', {
+                blocksFound: blocks.length, itemsFound: relevant.length,
+                validItems: jsonLdValidation.validItems, totalItems: jsonLdValidation.totalItems,
+            });
         } else {
             onStep('json-ld-irrelevant', { blocksFound: blocks.length });
         }

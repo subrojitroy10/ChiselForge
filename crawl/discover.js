@@ -199,7 +199,6 @@ async function crawlLinks(seed, { maxPages, timeoutMs, delayMs, allowedHost, onP
     const pages = new Set([seed]);
     const queue = [seed];
     const failures = [];
-    let robotsSkipped = 0;
 
     while (queue.length && pages.size < maxPages) {
         const page = queue.shift();
@@ -217,7 +216,9 @@ async function crawlLinks(seed, { maxPages, timeoutMs, delayMs, allowedHost, onP
                 // Checked here, before the page is ever queued/fetched — robots.txt
                 // governs FETCHING, not just the final result list, so a disallowed
                 // path must never be added to the crawl queue in the first place.
-                if (!isAllowed(href)) { robotsSkipped++; continue; }
+                // (isAllowed() itself records the rejection for robotsDisallowedCount
+                // — see discoverPages — so there's nothing to count here directly.)
+                if (!isAllowed(href)) continue;
                 pages.add(href);
                 queue.push(href);
                 if (pages.size >= maxPages) break;
@@ -227,7 +228,7 @@ async function crawlLinks(seed, { maxPages, timeoutMs, delayMs, allowedHost, onP
         }
         if (delayMs) await new Promise(r => setTimeout(r, delayMs));
     }
-    return { pages: [...pages], failures, robotsSkipped };
+    return { pages: [...pages], failures };
 }
 
 /**
@@ -280,17 +281,31 @@ async function discoverPages(seed, options = {}) {
         extraSitemapUrls = sitemapUrlsFromRobots(robots.body, seed);
     }
 
+    // A single shared set, checked by BOTH discoverFromSitemaps and
+    // crawlLinks — real bug found here: each source used to filter through
+    // isAllowed() independently, but only crawlLinks actually counted its
+    // own rejections. A URL disallowed via robots.txt that only ever showed
+    // up in the sitemap (never reachable through the link-crawl BFS at all)
+    // was correctly EXCLUDED from the result, but silently missing from
+    // robotsDisallowedCount — the telemetry undercounted real exclusions.
+    // Recording into one Set here, rather than two separate counters,
+    // fixes the undercount AND naturally avoids double-counting a URL that
+    // happens to be disallowed and present in both sources (Set semantics).
+    const robotsDisallowedUrls = new Set();
     const isAllowed = (url) => {
         if (url === seed || !robotsGroups.length) return true;
+        let allowed;
         try {
-            return !robotsDisallowsPath(robotsGroups, new URL(url).pathname);
+            allowed = !robotsDisallowsPath(robotsGroups, new URL(url).pathname);
         } catch (_) {
-            return true;
+            allowed = true;
         }
+        if (!allowed) robotsDisallowedUrls.add(url);
+        return allowed;
     };
 
     const sitemapPages = await discoverFromSitemaps(seed, { maxPages, timeoutMs, allowedHost, extraSitemapUrls, isAllowed });
-    const { pages: crawledPages, failures, robotsSkipped } = await crawlLinks(
+    const { pages: crawledPages, failures } = await crawlLinks(
         seed, { maxPages, timeoutMs, delayMs, allowedHost, onPage, renderWithBrowser, renderOnBlock, isAllowed }
     );
 
@@ -300,7 +315,7 @@ async function discoverPages(seed, options = {}) {
         pages,
         sitemapPageCount: sitemapPages.length,
         crawledPageCount: crawledPages.length,
-        robotsDisallowedCount: robotsSkipped,
+        robotsDisallowedCount: robotsDisallowedUrls.size,
         failures,
     };
 }

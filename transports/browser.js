@@ -230,9 +230,9 @@ function createBrowserRenderer({ stealth = false, browserRestartEvery, launchBro
             ({ chromium } = require('playwright'));
         } catch (err) {
             throw new Error(
-                'Browser rendering requires the optional "playwright" dependency, which is ' +
-                'not installed. Run `npm install playwright && npx playwright install chromium` ' +
-                '(or reinstall without `--omit=optional`) to use browser fallback.'
+                'Browser rendering requires "playwright", which is not installed — it is not ' +
+                'a dependency of chiselforge itself, so a normal install never pulls it in. ' +
+                'Run `npm install playwright && npx playwright install chromium` to use browser fallback.'
             );
         }
         return stealth

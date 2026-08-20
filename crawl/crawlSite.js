@@ -81,6 +81,12 @@ function loadPersistedResult(checkpointDir, url) {
  *        deliberately-reused checkpointDir correctly reports previously-
  *        completed pages, not just "already done, no data available."
  * @param {number} [options.maxRetries=1]
+ * @param {number} [options.errorBackoffMinMs]
+ *        Forwarded to runWorkerPool (core/worker-loop.js) — delay after a
+ *        failed page, before retrying/continuing. Defaults to
+ *        runWorkerPool's own default (20-40s) if not set; mainly useful to
+ *        turn down in tests that exercise retry behavior.
+ * @param {number} [options.errorBackoffMaxMs]
  * @param {boolean} [options.respectRobots=true]
  *        On by default — see crawl/discover.js's discoverPages for what this
  *        does. Set false to disable robots.txt filtering entirely.
@@ -107,6 +113,8 @@ async function crawlSite(seed, schema, options = {}) {
         delayMs = 200,
         checkpointDir = defaultCheckpointDir(),
         maxRetries = 1,
+        errorBackoffMinMs,
+        errorBackoffMaxMs,
         respectRobots = true,
         extractOptions = {},
         onProgress = () => {},
@@ -142,6 +150,8 @@ async function crawlSite(seed, schema, options = {}) {
         maxRetries,
         delayBetweenJobsMinMs: delayMs,
         delayBetweenJobsMaxMs: delayMs + 300,
+        errorBackoffMinMs,
+        errorBackoffMaxMs,
         processJob: async (job) => {
             onProgress('page-start', { url: job.url });
             const warnings = [];
@@ -175,8 +185,32 @@ async function crawlSite(seed, schema, options = {}) {
             // options.html so it doesn't re-render a second time.
             let browserUsed = false;
             if (classifyHtml(html, { status: httpStatus }).needsBrowser && extractOptions.renderWithBrowser) {
-                html = await extractOptions.renderWithBrowser(job.url);
-                browserUsed = true;
+                try {
+                    html = await extractOptions.renderWithBrowser(job.url);
+                    browserUsed = true;
+                } catch (err) {
+                    // Real gap: this call used to be unguarded, so a thrown
+                    // renderWithBrowser (a crashed/misbehaving renderer, not
+                    // just a bot-block) propagated straight out of
+                    // processJob without ever calling setResult() for this
+                    // URL — pageResults had no entry and nothing was
+                    // persisted, so the final report fell through to the
+                    // generic "not processed (worker pool did not report a
+                    // result)" fallback below, losing the actual reason.
+                    // Persist the real failure before rethrowing so
+                    // runWorkerPool's retry/checkpoint logic still runs
+                    // normally — a later successful retry's setResult()
+                    // overwrites this one, same as the fetch-failure case
+                    // just above.
+                    warnings.push(`render failed: ${err.message}`);
+                    setResult(job.url, {
+                        url: job.url, title: null, rawText: '', data: [],
+                        strategy: null, llmUsed: null, browserUsed: null, confidence: null,
+                        warnings, error: `render failed: ${err.message}`,
+                    });
+                    onProgress('page-error', { url: job.url, error: `render failed: ${err.message}` });
+                    throw err; // let runWorkerPool's retry/checkpoint logic handle it
+                }
             }
 
             // Raw deterministic text — never LLM-paraphrased, always captured

@@ -4,7 +4,71 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project is pre-1.0 (`0.x`) — expect breaking changes between minor
 versions until 1.0.
 
-## [Unreleased] — pre-launch hardening
+## [Unreleased] — stabilization pass
+
+A narrowly-scoped follow-up fixing real behavioral bugs found in an
+independent review of the 0.1.0 hardening pass below, plus a Node/Playwright
+version-policy fix. Not a redesign — see each item's regression test.
+
+### Changed
+- **`package.json`'s `engines.node` raised from `>=18` to `>=20`.**
+  `playwright` (a `devDependency`) itself requires Node >=20 — declaring
+  `>=18` was an internally inconsistent policy nobody could actually rely
+  on. CI matrix (`.github/workflows/test.yml`) updated to `[20.x, 22.x]`.
+  A normal `npm install chiselforge` still does not install `playwright` or
+  `undici` regardless (unaffected by this change — see the 0.1.0 entry
+  below for why).
+- `transports/http.js` and `transports/browser.js`'s missing-dependency
+  error messages no longer say "reinstall without `--omit=optional`" —
+  stale advice from when these were `optionalDependencies`. They're
+  `devDependencies` now (never installed automatically for a downstream
+  consumer either way); the errors just say `npm install undici` /
+  `npm install playwright && npx playwright install chromium` directly.
+- `crawl/crawlSite()` gained `errorBackoffMinMs`/`errorBackoffMaxMs`
+  passthrough options to `runWorkerPool` (same pattern already used for
+  `maxRetries`/`delayMs`) — needed to make retry behavior testable in
+  reasonable time; defaults are unchanged if unset.
+
+### Fixed
+- **A JSON-LD result could short-circuit tier 1 when only SOME of several
+  records validated against the schema**, e.g. `[{"name":"A","price":10},
+  {"name":"B"}]` against a `name`+`price` schema was returned as the final
+  result with `validation.valid: false` — violating the "URL + schema ->
+  validated structured data" contract. Tightened from "at least one item
+  validates" (the 0.1.0-era fix below) to "every relevant item validates"
+  (`validateItems(...).valid === true`); otherwise escalates to
+  hydration/text, same as "present but irrelevant." Applies identically
+  whether tier 1 matched via the field-overlap heuristic or an explicit
+  `jsonLdType`. No `allowPartial` API added.
+- **A `renderWithBrowser()` that threw during `crawlSite()` lost the real
+  error.** The render call inside `processJob` was unguarded, so the thrown
+  error propagated out without ever recording a result for that URL — the
+  final report fell back to the generic "not processed (worker pool did not
+  report a result)" instead of the actual failure. Now caught, persisted as
+  `render failed: <message>` (URL, warnings, and provenance preserved)
+  before rethrowing so `runWorkerPool`'s retry/checkpoint logic still runs
+  normally — a later successful retry still overwrites it with the real
+  result.
+- **`robotsDisallowedCount` could under-report.** `discoverFromSitemaps` and
+  `crawlLinks` each independently filtered candidate pages through the same
+  `isAllowed()` check, but only `crawlLinks` counted its own rejections — a
+  URL disallowed by `robots.txt` that was reachable *only* via the sitemap
+  (no incoming link anywhere) was correctly excluded from the result but
+  invisible to the count. Fixed by recording rejections into one `Set`
+  shared by both discovery sources, inside `isAllowed()` itself — fixes the
+  undercount and (via `Set` semantics) guarantees a URL disallowed and
+  present in both sources is still counted exactly once, not twice.
+
+## [0.1.0] — initial public release
+
+The first published version: `autoExtract()`'s tiered pipeline (JSON-LD →
+hydration-state+LLM → raw-text+LLM), schema validation, confidence scoring,
+the CLI (`extract` / `crawl`), multi-page crawling (`crawlSite` /
+`discoverPages`), and the underlying engineering layer (`runWorkerPool`,
+`JobQueue`, checkpointing, `RateLimiter`, `ProxyPool`, structured logging)
+generalized from earlier production scraping pipelines — plus a pre-launch
+hardening pass on top before publishing. See `docs/architecture.md` and
+`docs/benchmarks.md` for what's actually been measured.
 
 ### Added
 - `examples/` — nine runnable example scripts covering basic extraction,
@@ -100,14 +164,3 @@ versions until 1.0.
   `fetchHtml`'s real option, `allowBotBlockFallback`) — removed.
   `llm.extractWithLLM`'s return type corrected from `Promise<any>` to
   `Promise<any[]>` to match the object→array normalization fix above.
-
-## [0.1.0] — initial engine
-
-The first working version of the engine described in this repo: `autoExtract()`'s
-tiered pipeline (JSON-LD → hydration-state+LLM → raw-text+LLM), schema
-validation, confidence scoring, the CLI (`extract` / `crawl`), multi-page
-crawling (`crawlSite` / `discoverPages`), and the underlying engineering
-layer (`runWorkerPool`, `JobQueue`, checkpointing, `RateLimiter`,
-`ProxyPool`, structured logging) generalized from earlier production
-scraping pipelines. See `docs/architecture.md` and `docs/benchmarks.md` for
-what's actually been measured.

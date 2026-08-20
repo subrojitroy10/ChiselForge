@@ -4,7 +4,8 @@
 // (proxy + UA rotation, proven at scale) and Scrapper/zomato.js's fetchHtml()
 // (proven against Zomato with zero proxy, zero blocks).
 //
-// Zero dependencies for the no-proxy path (native fetch, Node 18+). The
+// Zero dependencies for the no-proxy path (native fetch — stable since Node
+// 18, and this package requires Node >=20 anyway, see package.json). The
 // proxy path lazily requires `undici` (the library Node's own fetch is built
 // on) only when a proxy URL is actually supplied — same lazy-require pattern
 // used in Scrapper/zomato.js for playwright, so `node your-adapter.js <url>`
@@ -85,9 +86,9 @@ async function fetchHtml(url, options = {}) {
             ({ ProxyAgent } = require('undici'));
         } catch (err) {
             throw new Error(
-                'Proxy support requires the optional "undici" dependency, which is not ' +
-                'installed. Run `npm install undici` (or reinstall without `--omit=optional`) ' +
-                'to use proxyUrl.'
+                'Proxy support requires "undici", which is not installed — it is not a ' +
+                'dependency of chiselforge itself, so a normal install never pulls it in. ' +
+                'Run `npm install undici` to use proxyUrl.'
             );
         }
         fetchOptions.dispatcher = new ProxyAgent(proxyUrl);

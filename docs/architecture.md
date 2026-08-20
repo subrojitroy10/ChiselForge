@@ -133,7 +133,11 @@ interfaces — not before.
 
 **Runtime: Node.js, staying Node.js.** Playwright's ecosystem, native
 `fetch`, npm distribution, and the `npx chiselforge` zero-install
-experience all depend on it. Not up for debate.
+experience all depend on it. Not up for debate. `package.json` requires
+Node >=20 — matching Playwright's own `engines` requirement, so there's one
+version policy for the whole dependency tree instead of chiselforge
+nominally supporting an older Node than its own browser-rendering
+dependency does.
 
 **JavaScript vs. TypeScript — currently JavaScript, this is a real open
 decision, not a settled one.** The decision rule this project uses when

@@ -31,6 +31,16 @@ one common field name (e.g. `name`) with an unrelated `WebSite` block get
 accepted incorrectly, found via testing. This is a heuristic, not an exact
 match — `jsonLdType` is always more precise when you know it.
 
+**Relevant isn't automatically usable.** Whether tier 1 fires via
+`jsonLdType` or the heuristic, "the block's fields plausibly match" is a
+different question from "every returned item actually validates against
+the schema." A `Product` block with `name`/`price` but no `rating`, against
+a schema asking for all three, does not short-circuit tier 1 — with
+multiple JSON-LD records, the same rule applies to the whole set: tier 1
+only accepts the result when **every** relevant item validates
+(`validateItems(...).valid === true`), not just some of them. Otherwise it
+falls through to tier 2/3, same as "present but irrelevant."
+
 ## Tier 2 — Hydration state (`extraction/classify.js` + `extraction/llm.js`)
 
 Many modern sites (React/Vue/Next.js apps with server-side rendering) embed

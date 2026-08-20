@@ -37,7 +37,7 @@
   },
   "homepage": "https://github.com/subrojitroy10/ChiselForge#readme",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "test": "node --test",

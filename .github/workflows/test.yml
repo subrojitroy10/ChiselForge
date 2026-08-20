@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [20.x, 22.x]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,8 +18,10 @@ jobs:
           node-version: ${{ matrix.node-version }}
       # No `npm install` step: the committed test suite (test/) is
       # fixture-based with zero runtime dependencies (see CONTRIBUTING.md) —
-      # playwright/undici are optional and only needed for the browser
-      # transport / proxy support, neither of which the committed tests
-      # exercise. benchmark/ is intentionally NOT run in CI — it costs real
-      # time/money against a live LLM API and live pages (see docs/benchmarks.md).
+      # playwright/undici are devDependencies, needed only for the browser
+      # transport / proxy support and benchmark/, neither of which the
+      # committed tests exercise. benchmark/ is intentionally NOT run in CI
+      # — it costs real time/money against a live LLM API and live pages
+      # (see docs/benchmarks.md). package.json requires Node >=20 (matches
+      # playwright's own engines requirement).
       - run: npm test

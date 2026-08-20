@@ -5,7 +5,15 @@
 pages, a real local Playwright browser render, and a real NIM API. No
 extrapolated or assumed figures.
 
-Last measured: 2026-08-12T23:50Z, model `nvidia/llama-3.3-nemotron-super-49b-v1`.
+Last measured: 2026-08-12T23:50Z (original 8 cases), model
+`nvidia/llama-3.3-nemotron-super-49b-v1`. One case added and measured
+2026-08-20 (Atomberg, below) — a real live commercial site's homepage,
+run once to validate the JSON-LD tier against real-world markup, not
+merely the toscrape.com fixtures. A second case (Replit) was added to
+`benchmark/corpus.js` the same day but has **not** been run — no
+`NIM_API_KEY` was available at the time, and this document does not print
+numbers for a case that hasn't actually executed. Run
+`NIM_API_KEY=... node benchmark/run.js` yourself to complete it.
 
 ## What kind of test each case is
 
@@ -16,11 +24,12 @@ Last measured: 2026-08-12T23:50Z, model `nvidia/llama-3.3-nemotron-super-49b-v1`
   not an external site — see the SPA case below for why), and real LLM
   calls. Costs time and API usage. Not run in CI (see `.github/workflows/test.yml`).
 
-## Results — 8 cases, genuinely different page architectures
+## Results — 9 measured cases, genuinely different page architectures
 
 | Case | Tier | LLM | Browser | Items | Confidence | Latency | Result |
 |---|---|---|---|---|---|---|---|
 | Zomato restaurant metadata (relevant JSON-LD) | `json-ld` | no | no | 1 | 0.95 | 918ms | ✅ |
+| Atomberg homepage (`Organization` JSON-LD nested inside `@graph`) | `json-ld` | no | no | 1 | 0.95 | 2,860ms | ✅ |
 | Zomato reviews (irrelevant JSON-LD present, correctly skipped) | `hydration` | yes | no | 5 | 0.75 | 32,878ms | ✅ |
 | DigitalOcean tutorials (Next.js `__NEXT_DATA__`, different domain) | `hydration` | yes | no | 9 | 0.75 | 31,650ms | ✅ |
 | example.com (plain SSR, no structure, single entity) | `text` | yes | no | 1 | 0.50 | 1,513ms | ✅ |
@@ -29,15 +38,24 @@ Last measured: 2026-08-12T23:50Z, model `nvidia/llama-3.3-nemotron-super-49b-v1`
 | Honest-failure case (schema asks for data the page doesn't have) | `text` | yes | no | **0** | 0 | 848ms | ✅ (correctly empty, no hallucination) |
 | SPA shell requiring browser rendering (local fixture + real Playwright) | `text` | yes | **yes** | 1 | 0.50 | 5,348ms | ✅ |
 
-**8/8 passed** — where "passed" for the honest-failure case specifically
-means *correctly returning nothing*, not extracting a plausible-looking
-fabrication. See "Why the honest-failure case matters" below.
+**Not yet measured:** Replit homepage (`__NEXT_DATA__` hydration, a
+different shape than DigitalOcean's) — present in `benchmark/corpus.js`,
+classification/routing verified (correctly detects hydration, correctly
+attempts the LLM tier), but the LLM step itself hasn't been run against it.
 
-**1 of 8 avoided the LLM entirely** (the JSON-LD case — the only page in
-this corpus that had schema.org data actually matching what was asked for).
-**JSON-LD is ~35x faster than the LLM-backed tiers** in this run (918ms vs.
-an ~32,000ms average for the two hydration cases) — the concrete cost of a
-page not exposing structured data for what you want.
+**9/9 measured cases passed** — where "passed" for the honest-failure case
+specifically means *correctly returning nothing*, not extracting a
+plausible-looking fabrication. See "Why the honest-failure case matters"
+below.
+
+**2 of 9 avoided the LLM entirely** (both JSON-LD cases — the only pages in
+this corpus that had schema.org data actually matching what was asked for;
+note the Atomberg case shows this holds even when the matching block is
+nested inside `@graph` rather than a top-level `@type`, and against a much
+larger real page — ~900KB of HTML — than the other JSON-LD case). **JSON-LD
+is roughly an order of magnitude faster than the LLM-backed tiers** in this
+run (918-2,860ms vs. an ~32,000ms average for the two hydration cases) —
+the concrete cost of a page not exposing structured data for what you want.
 
 ## Why the honest-failure case matters
 
@@ -138,10 +156,11 @@ directly without a `renderWithBrowser` option.
 - ~~React/SPA rendering was validated with a local fixture, not a live
   external SPA.~~ Closed above — validated against `stron.in`, a real
   live external SPA, with a real multi-page crawl.
-- **8 cases is a real, diverse corpus, not a token one — but it is not the
-  10-20 case target** a mature benchmark should reach. Grow it further
-  before treating any percentage derived from this data as broadly
-  representative of "the web."
+- **9 measured cases (10 in the corpus, one — Replit — not yet run) is a
+  real, diverse corpus, not a token one — but it is not the 10-20 case
+  target** a mature benchmark should reach. Grow it further before treating
+  any percentage derived from this data as broadly representative of "the
+  web."
 - **No article/news page with `Article`-typed JSON-LD** — quotes.toscrape.com
   covers text-shaped content but has no structured markup at all; a page
   with relevant-but-different-typed JSON-LD (e.g. `Article` instead of
@@ -153,12 +172,14 @@ directly without a `renderWithBrowser` option.
   than something `autoExtract`'s single-page model handles).
 
 **Do not repeat unqualified claims like "X% of pages skip the LLM" from
-this data alone** — 8 samples, while genuinely diverse, is still a modest
-corpus. The claim this data actually supports: *"across 8 genuinely
+this data alone** — 9 measured samples, while genuinely diverse, is still a
+modest corpus. The claim this data actually supports: *"across 9 genuinely
 different page architectures, the engine correctly identified which tier
 could answer each request, used JSON-LD when — and only when — it was
-actually relevant, correctly declined to fabricate data that wasn't
-present, and correctly used real browser rendering when required."*
+actually relevant (including when nested inside `@graph` on a real,
+~900KB commercial homepage, not just small fixture pages), correctly
+declined to fabricate data that wasn't present, and correctly used real
+browser rendering when required."*
 
 ## Running this yourself
 
