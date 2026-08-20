@@ -225,7 +225,16 @@ function createBrowserRenderer({ stealth = false, browserRestartEvery, launchBro
     let renderCount = 0;
 
     const launch = launchBrowser || (() => {
-        const { chromium } = require('playwright');
+        let chromium;
+        try {
+            ({ chromium } = require('playwright'));
+        } catch (err) {
+            throw new Error(
+                'Browser rendering requires the optional "playwright" dependency, which is ' +
+                'not installed. Run `npm install playwright && npx playwright install chromium` ' +
+                '(or reinstall without `--omit=optional`) to use browser fallback.'
+            );
+        }
         return stealth
             ? chromium.launch({ headless: false, args: STEALTH_BROWSER_ARGS })
             : chromium.launch({ headless: true });

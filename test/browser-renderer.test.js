@@ -3,7 +3,7 @@
 // free of a real Playwright launch — same "stub instead of real browser"
 // approach test/auto-browser-fallback.test.js already uses for
 // renderWithBrowser itself. Real Playwright rendering IS exercised for real
-// in benchmark/run.js (see BENCHMARKS.md) — this test is about the restart
+// in benchmark/run.js (see docs/benchmarks.md) — this test is about the restart
 // counting logic, not proving Playwright itself works.
 //
 // Context (not tested here, no code path exists for it): BrowserRuntime in

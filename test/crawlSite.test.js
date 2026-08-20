@@ -3,7 +3,7 @@
 // every fixture page carries relevant JSON-LD) + report generation all work
 // together, fully offline and deterministic. Live-site crawling and the LLM
 // tiers are exercised separately in benchmark/ (real network, real cost —
-// see BENCHMARKS.md), kept out of the committed test suite intentionally.
+// see docs/benchmarks.md), kept out of the committed test suite intentionally.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -132,6 +132,36 @@ test('rawText reflects rendered content for a page that needed a browser, not th
         // itself and passes the result into autoExtract via options.html,
         // which must not trigger a second render internally.
         assert.equal(renderCallCount, 1, 'page should only be rendered once, not twice');
+    } finally {
+        await server.close();
+    }
+});
+
+// Regression test: crawlSite() resolves browser rendering itself (see above)
+// and hands the already-rendered HTML to autoExtract via options.html.
+// autoExtract only used to set extraction.browserUsed = true when IT called
+// renderWithBrowser directly — since the HTML it received here was already
+// rendered (and the resolved HTML itself no longer needsBrowser), that
+// branch never ran, so a page that genuinely required a browser was
+// reported with browserUsed: false. Fixed by crawlSite passing
+// options.browserUsed through to autoExtract when it did the pre-render.
+test('a page that required browser rendering reports browserUsed: true, not false', async () => {
+    const RENDERED_HTML = `<html><body>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Wireless Keyboard Pro"}</script>
+<div id="root"><h1>Wireless Keyboard Pro</h1><p>Rendered content.</p></div>
+</body></html>`;
+    const server = await startLocalServer(path.join(__dirname, '..', 'benchmark', 'fixtures'));
+    const checkpointDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chiselforge-crawl-browserused-'));
+
+    try {
+        const result = await crawlSite(server.url('spa-product.html'), { name: 'string' }, {
+            maxPages: 1, workers: 1, delayMs: 0, checkpointDir,
+            extractOptions: { renderWithBrowser: async () => RENDERED_HTML },
+        });
+
+        assert.equal(result.pagesExtracted, 1);
+        assert.equal(result.pages[0].error, null);
+        assert.equal(result.pages[0].browserUsed, true, 'a page that genuinely required browser rendering must report browserUsed: true');
     } finally {
         await server.close();
     }

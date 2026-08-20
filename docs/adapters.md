@@ -19,11 +19,11 @@ contains none.
   operational, compliance, and provenance considerations (site-specific DOM
   assumptions, ToS posture, business logic) that don't belong in a generic,
   public extraction runtime, and publishing them isn't necessary to prove
-  the engine works. See [`BENCHMARKS.md`](BENCHMARKS.md) for that proof
+  the engine works. See [`benchmarks.md`](benchmarks.md) for that proof
   instead — real, reproducible, measured runs of the *generic* engine
   (`autoExtract`, not a site-specific adapter) against real sites.
 - **`autoExtract()` is not an adapter.** It's the generic engine
-  (`EXTRACTION_STRATEGIES.md`) — it doesn't know about any specific site.
+  (`extraction-strategies.md`) — it doesn't know about any specific site.
   Reach for a real adapter (built by you, following the interface below)
   when you need reliability against one particular site beyond what the
   generic tiers can guarantee (e.g. you need every page of a paginated

@@ -22,7 +22,7 @@ const { classifyHtml } = require('../extraction/classify');
 const { autoExtract } = require('../extraction/auto');
 
 // A page body that would NOT be flagged by the pre-existing empty-shell
-// heuristic (plenty of visible text, no bare #root/#app mount point) —
+// heuristic (plenty of source text, no bare #root/#app mount point) —
 // proves the bot-block signal is genuinely independent of body shape, not a
 // side effect of the blocked page happening to look empty.
 const BLOCKED_PAGE_BODY = `<html><body>
@@ -90,7 +90,7 @@ test('BOT_BLOCK_STATUSES covers 403, 429, and 503 specifically', () => {
     assert.ok(!BOT_BLOCK_STATUSES.has(500));
 });
 
-test('classifyHtml flags needsBrowser for a bot-block status even when the body has plenty of visible text', () => {
+test('classifyHtml flags needsBrowser for a bot-block status even when the body has plenty of source text', () => {
     const withoutStatus = classifyHtml(BLOCKED_PAGE_BODY);
     assert.equal(withoutStatus.needsBrowser, false, 'sanity check: this body alone should NOT trip the empty-shell heuristic');
 

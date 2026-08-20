@@ -2,7 +2,7 @@
 // pages with no JSON-LD (extraction/json-ld.js) and no known hydration-state
 // shape. Costs money and latency per call and is non-deterministic, so an
 // adapter should only reach this tier after the cheaper deterministic tiers
-// have been tried and failed. See adapter-interface.md.
+// have been tried and failed. See docs/adapter-interface.md.
 //
 // Provider-agnostic: targets any OpenAI-compatible /chat/completions endpoint.
 // Defaults to NVIDIA NIM (https://integrate.api.nvidia.com/v1) since that's
@@ -81,7 +81,9 @@ function parseJsonFromLLMResponse(content) {
  *        with no max_tokens set at all, i.e. provider default) — raise this
  *        if you see empty results on a page that should have data.
  * @param {number} [options.timeoutMs=60000]
- * @returns {Promise<any>} Parsed JSON — typically an array of extracted items
+ * @returns {Promise<any[]>} Parsed JSON, always normalized to an array — a
+ *          model returning a single bare object (common for single-entity
+ *          pages) is wrapped as a one-item array rather than passed through
  */
 async function extractWithLLM(pageContent, schema, options = {}) {
     const {
@@ -134,7 +136,15 @@ async function extractWithLLM(pageContent, schema, options = {}) {
 
         const data = await response.json();
         const content = data.choices?.[0]?.message?.content || '';
-        return parseJsonFromLLMResponse(content);
+        const parsed = parseJsonFromLLMResponse(content);
+        // Despite the system prompt asking for a JSON array, a model can
+        // return a single bare object for a single-entity page (e.g.
+        // {"title":"..."} instead of [{"title":"..."}]) — every downstream
+        // consumer (validateItems, extractWithRetryOnEmpty) assumes an
+        // array, and a bare object crashes with "items.map is not a
+        // function" rather than a clear error. Normalize here, once, at the
+        // boundary, rather than defensively in every caller.
+        return Array.isArray(parsed) ? parsed : [parsed];
     } finally {
         clearTimeout(timer);
     }

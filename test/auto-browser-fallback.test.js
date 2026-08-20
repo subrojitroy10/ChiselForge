@@ -4,7 +4,7 @@
 // renderWithBrowser instead of launching real Playwright — keeps this test
 // suite fast, deterministic, and free of the playwright dependency. Real
 // Playwright rendering IS exercised for real in benchmark/run.js (see
-// BENCHMARKS.md) — this test is about the control flow, not proving
+// docs/benchmarks.md) — this test is about the control flow, not proving
 // Playwright itself works.
 
 const test = require('node:test');

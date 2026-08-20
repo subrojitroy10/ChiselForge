@@ -6,9 +6,9 @@
 //
 //   NIM_API_KEY=... node benchmark/run.js
 //
-// Writes benchmark/results.json (measured data) — BENCHMARKS.md is written
+// Writes benchmark/results.json (measured data) — docs/benchmarks.md is written
 // by hand FROM that file's contents, never from assumptions. If you re-run
-// this, regenerate BENCHMARKS.md's numbers to match, don't leave them stale.
+// this, regenerate docs/benchmarks.md's numbers to match, don't leave them stale.
 
 const fs = require('fs');
 const path = require('path');

@@ -43,7 +43,7 @@ per-job function.
 1. **`fetchHtml(url)`** (`transports/http.js`) — plain HTTP GET, no browser.
 2. **`classifyHtml(html)`** (`extraction/classify.js`) — pure function, no
    network. Decides: does this need a browser? Is there JSON-LD? Is there a
-   known hydration-state global? See `EXTRACTION_STRATEGIES.md`.
+   known hydration-state global? See `extraction-strategies.md`.
 3. If `needsBrowser`, the caller-supplied `renderWithBrowser(url)` runs and
    the page is reclassified against the rendered HTML. `autoExtract` does
    not launch a browser itself — see "Why no built-in browser fallback"
@@ -62,10 +62,14 @@ per-job function.
 existed independently, tied together for the first time by this module:
 
 1. **`crawl/discover.js`** — generic (no site-specific logic) page discovery.
-   Tries `sitemap.xml`/`robots.txt` first, then falls back to a same-origin
+   Tries `sitemap.xml`/`robots.txt` first, then falls back to a same-host
    BFS crawl of `<a href>` links. Ported from `web-UI/automate.js`, which
    already implemented this generically for a different purpose (frontend
-   tech-stack inspection) — direct reuse, not a rewrite.
+   tech-stack inspection) — direct reuse, not a rewrite. `robots.txt` is
+   parsed for real (`User-agent`/`Disallow`/`Allow`, longest-path-wins), not
+   just scraped for `Sitemap:` lines — `respectRobots: true` by default
+   (`--ignore-robots` on the CLI to opt out), checked before a candidate
+   page is ever queued for a fetch, not just filtered from the final list.
 2. **`core/worker-loop.js`'s `runWorkerPool`** — gives the crawl
    checkpointing, configurable concurrency, and retry, for free. Resumability
    is opt-in, not automatic: `checkpointDir` defaults to a fresh unique
@@ -151,14 +155,20 @@ evaluating a new component:
    were a pragmatic choice to ship a tested, working v0.1 without also
    taking on a full-codebase language migration's regression risk in the
    same pass as the rest of the v0.1 hardening work (CLI, validation,
-   confidence scoring, benchmark, docs, licensing). **A converted-to-TypeScript
-   version of this codebase is a legitimate, still-open next step** —
-   deliberately not done silently in this pass, since a full rewrite of
-   ~20 already-tested files carries real regression risk and wasn't itself
-   one of the bounded, verifiable changes this hardening pass made. Treat
-   this as a tracked decision requiring an explicit choice (full migration
-   vs. incremental `.d.ts` type declarations layered on the existing `.js`
-   vs. deferring further), not a default either way.
+   confidence scoring, benchmark, docs, licensing).
+
+   **The decision this project has made:** hand-written `.d.ts` declarations
+   (`types/index.d.ts`) layered on top of the existing `.js`, not a full
+   TypeScript rewrite. This gives TypeScript/JS consumers autocomplete,
+   argument hints, and result types on the public API (`autoExtract`,
+   `crawlSite`, `runWorkerPool`, `JobQueue`, `RateLimiter`, `ProxyPool`,
+   etc.) without the regression risk of rewriting ~20 already-tested runtime
+   files in the same pass. The declarations describe the existing JS
+   surface; they don't change any runtime behavior, and they're not
+   generated from the `.js` source — keep them in sync by hand when a public
+   function's signature changes. A full runtime migration to TypeScript
+   remains a legitimate future step, but is a separate, larger decision from
+   "does this package have type declarations."
 
 **Python — not present in this repo, and shouldn't be added speculatively.**
 There is no ML/statistical component here yet (`extraction/confidence.js` is
@@ -190,6 +200,6 @@ data, would be pretending sophistication this project doesn't have.
 
 ## Related docs
 
-- [`EXTRACTION_STRATEGIES.md`](EXTRACTION_STRATEGIES.md) — tier mechanics
-- [`ADAPTERS.md`](ADAPTERS.md) — building site-specific logic on top of this
-- [`LLM.md`](LLM.md) — the LLM tier's provider setup
+- [`extraction-strategies.md`](extraction-strategies.md) — tier mechanics
+- [`adapters.md`](adapters.md) — building site-specific logic on top of this
+- [`llm-providers.md`](llm-providers.md) — the LLM tier's provider setup

@@ -60,7 +60,14 @@ function detectHydrationState(html) {
     return null;
 }
 
-function stripToVisibleText(html) {
+// Strips tags/scripts/styles from raw HTML source. This is NOT a CSS
+// visibility computation — it doesn't know about display:none, visibility:
+// hidden, or anything that requires an actual rendered DOM (a real browser
+// would). It just approximates "roughly how much text content is in the
+// source," which is what the empty-shell heuristic below actually needs —
+// named stripToSourceText (not stripToVisibleText) so the name doesn't
+// overclaim precision this function doesn't have.
+function stripToSourceText(html) {
     return String(html || '')
         .replace(/<script[\s\S]*?<\/script>/gi, ' ')
         .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -69,13 +76,13 @@ function stripToVisibleText(html) {
         .trim();
 }
 
-// Heuristic SPA-shell detector: very little visible text plus a bare mount
+// Heuristic SPA-shell detector: very little source text plus a bare mount
 // point (#root/#app/#__next with nothing inside) strongly suggests content
 // is rendered client-side after JS runs, i.e. a browser is required.
 function looksLikeEmptyShell(html) {
-    const visibleText = stripToVisibleText(html);
+    const sourceText = stripToSourceText(html);
     const hasBareMountPoint = /<div[^>]+id=["'](root|app|__next|__nuxt)["'][^>]*>\s*<\/div>/i.test(html);
-    return visibleText.length < 200 && hasBareMountPoint;
+    return sourceText.length < 200 && hasBareMountPoint;
 }
 
 /**
@@ -90,7 +97,7 @@ function looksLikeEmptyShell(html) {
  *   needsBrowser: boolean,
  *   hasJsonLd: boolean,
  *   hydration: { key: string, state: object } | null,
- *   visibleTextLength: number,
+ *   sourceTextLength: number,
  *   blockedStatus: number | null
  * }}
  */
@@ -98,7 +105,7 @@ function classifyHtml(html, options = {}) {
     const { status } = options;
     const hydration = detectHydrationState(html);
     const hasJsonLd = /<script[^>]+type=["']application\/ld\+json["']/i.test(html);
-    const visibleTextLength = stripToVisibleText(html).length;
+    const sourceTextLength = stripToSourceText(html).length;
     const blockedStatus = status != null && BOT_BLOCK_STATUSES.has(status) ? status : null;
     // Real bug found via live testing (stron.in, a Vite/React SPA): JSON-LD
     // presence does NOT imply the page's actual content is server-rendered.
@@ -118,13 +125,13 @@ function classifyHtml(html, options = {}) {
     // needs its own signal here rather than relying on the body shape.
     const needsBrowser = !hydration && (looksLikeEmptyShell(html) || blockedStatus !== null);
 
-    return { needsBrowser, hasJsonLd, hydration, visibleTextLength, blockedStatus };
+    return { needsBrowser, hasJsonLd, hydration, sourceTextLength, blockedStatus };
 }
 
 module.exports = {
     classifyHtml,
     detectHydrationState,
-    stripToVisibleText,
+    stripToSourceText,
     looksLikeEmptyShell,
     KNOWN_HYDRATION_GLOBALS,
 };

@@ -42,10 +42,17 @@ function startStubLLMServer(responseContent) {
     });
 }
 
+// Plain unrecognized HTML with no JSON-LD/hydration markers — falls straight
+// through to tier 3 (text) regardless of the URL, so autoExtract never needs
+// to actually resolve it. Passed via options.html below to skip the internal
+// fetch entirely, keeping this test offline with no real DNS/HTTP dependency.
+const STUB_PAGE_HTML = '<html><body><p>stub page content, no structured data</p></body></html>';
+
 test('autoExtract forwards baseUrl to a custom LLM endpoint (not just extraction/llm.js in isolation)', async () => {
     const stub = await startStubLLMServer('[{"title":"stub result","purpose":"proves baseUrl forwarding"}]');
     try {
-        const result = await autoExtract('https://example.com/', { title: 'string', purpose: 'string' }, {
+        const result = await autoExtract('http://local.invalid/', { title: 'string', purpose: 'string' }, {
+            html: STUB_PAGE_HTML,
             apiKey: 'fake-key-not-a-real-secret',
             baseUrl: stub.baseUrl,
             model: 'totally-custom-model-id',
@@ -62,7 +69,8 @@ test('autoExtract forwards baseUrl to a custom LLM endpoint (not just extraction
 test('autoExtract forwards llmMaxTokens and llmTimeoutMs consistently across tiers', async () => {
     const stub = await startStubLLMServer('[{"title":"x","purpose":"y"}]');
     try {
-        await autoExtract('https://example.com/', { title: 'string', purpose: 'string' }, {
+        await autoExtract('http://local.invalid/', { title: 'string', purpose: 'string' }, {
+            html: STUB_PAGE_HTML,
             apiKey: 'fake-key', baseUrl: stub.baseUrl, llmMaxTokens: 777,
         });
         assert.equal(stub.getReceivedBody().max_tokens, 777);

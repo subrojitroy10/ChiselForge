@@ -1,6 +1,6 @@
 // Confidence scoring — a fixed heuristic for v0.1, NOT a trained model.
 //
-// The intended future direction (see ARCHITECTURE.md) is to learn confidence
+// The intended future direction (see docs/architecture.md) is to learn confidence
 // from actual extraction outcomes over time. Building that now would be
 // pretending sophistication this project doesn't have yet. This just
 // combines "how deterministic was the tier that answered" with "how much of

@@ -5,7 +5,7 @@
 //   3. extraction/auto.js   — the tiered per-page extraction pipeline
 //
 // No site-specific code anywhere in this file — it works the same way
-// against any site. Raw deterministic visible text is captured per page
+// against any site. Raw deterministic source text is captured per page
 // alongside the schema-shaped extraction result, specifically so the corpus
 // this produces is never solely dependent on LLM paraphrasing — see
 // "why raw text is captured separately" below.
@@ -64,7 +64,7 @@ function loadPersistedResult(checkpointDir, url) {
 }
 
 /**
- * Crawls a site starting from `seed`, discovering same-origin pages and
+ * Crawls a site starting from `seed`, discovering same-host pages and
  * running each one through the tiered autoExtract pipeline.
  *
  * @param {string} seed
@@ -81,6 +81,9 @@ function loadPersistedResult(checkpointDir, url) {
  *        deliberately-reused checkpointDir correctly reports previously-
  *        completed pages, not just "already done, no data available."
  * @param {number} [options.maxRetries=1]
+ * @param {boolean} [options.respectRobots=true]
+ *        On by default — see crawl/discover.js's discoverPages for what this
+ *        does. Set false to disable robots.txt filtering entirely.
  * @param {object} [options.extractOptions] Forwarded to every autoExtract() call — apiKey, baseUrl, model, jsonLdType, instructions, etc.
  * @param {(event:string, detail?:object)=>void} [options.onProgress]
  * @returns {Promise<{
@@ -104,13 +107,14 @@ async function crawlSite(seed, schema, options = {}) {
         delayMs = 200,
         checkpointDir = defaultCheckpointDir(),
         maxRetries = 1,
+        respectRobots = true,
         extractOptions = {},
         onProgress = () => {},
     } = options;
 
     onProgress('discovering', { seed });
     const discovery = await discoverPages(seed, {
-        maxPages, delayMs,
+        maxPages, delayMs, respectRobots,
         onPage: (url, count) => onProgress('discovery-page', { url, count }),
         renderWithBrowser: extractOptions.renderWithBrowser,
         renderOnBlock: extractOptions.renderOnBlock,
@@ -119,6 +123,7 @@ async function crawlSite(seed, schema, options = {}) {
         pageCount: discovery.pages.length,
         sitemapPageCount: discovery.sitemapPageCount,
         crawledPageCount: discovery.crawledPageCount,
+        robotsDisallowedCount: discovery.robotsDisallowedCount,
     });
 
     const jobs = discovery.pages.map(url => ({ url }));
@@ -168,8 +173,10 @@ async function crawlSite(seed, schema, options = {}) {
             // so it reflects whatever content autoExtract will actually see.
             // The resolved html is then passed into autoExtract via
             // options.html so it doesn't re-render a second time.
+            let browserUsed = false;
             if (classifyHtml(html, { status: httpStatus }).needsBrowser && extractOptions.renderWithBrowser) {
                 html = await extractOptions.renderWithBrowser(job.url);
+                browserUsed = true;
             }
 
             // Raw deterministic text — never LLM-paraphrased, always captured
@@ -182,7 +189,7 @@ async function crawlSite(seed, schema, options = {}) {
 
             let extraction;
             try {
-                extraction = await autoExtract(job.url, schema, { ...extractOptions, html });
+                extraction = await autoExtract(job.url, schema, { ...extractOptions, html, browserUsed });
             } catch (err) {
                 warnings.push(`extraction failed: ${err.message}`);
                 setResult(job.url, {

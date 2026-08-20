@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose a new capability, extraction strategy, or adapter helper.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This project deliberately avoids abstraction ahead of a second real
+        use case — see `docs/architecture.md`'s "Why interfaces are minimal."
+        A concrete use case (a real site/schema you're extracting) makes a
+        proposal much easier to evaluate than an abstract one.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The concrete task or site this would help with.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: >
+        What you'd want to change or add. If it touches the tier order,
+        confidence scoring, or the adapter interface, say which existing
+        piece it extends (e.g. `extraction/classify.js`, `core/pagination.js`).
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Can this already be done by composing existing pieces (see "Engineering API" in the README)?
+    validations:
+      required: false

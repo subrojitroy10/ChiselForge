@@ -14,11 +14,11 @@
 // (JSON-LD) is — no LLM involved, same input always produces the same
 // output. Tiers 2 and 3 both use an LLM to map data onto the schema; tier 2
 // is more reliable because it hands the LLM clean structured JSON instead of
-// raw markup (see BENCHMARKS.md for the measured latency/reliability
+// raw markup (see docs/benchmarks.md for the measured latency/reliability
 // difference), but "more reliable than tier 3" is not "deterministic." Tier
 // 3 (no JSON-LD, no recognized hydration format) is the genuine last resort,
 // and where "any website" claims stop being fully honest. See
-// EXTRACTION_STRATEGIES.md. Don't oversell this.
+// docs/extraction-strategies.md. Don't oversell this.
 
 const { classifyHtml } = require('./classify');
 const { extractJsonLdBlocks, findByType, findRelevantBlocks } = require('./json-ld');
@@ -86,6 +86,12 @@ async function extractWithRetryOnEmpty(fn, attempts = 2) {
  *        omitted and a browser turns out to be required, this throws with a
  *        clear message rather than silently returning nothing.
  * @param {string} [options.html]          Pre-fetched HTML — skips the internal fetch if supplied (e.g. for crawlers that already fetched the page)
+ * @param {boolean} [options.browserUsed=false]
+ *        Set this to true when the HTML passed via options.html was already
+ *        produced by a browser render before this call (e.g. crawlSite.js
+ *        resolving needsBrowser itself, upstream of autoExtract). Without
+ *        this, extraction.browserUsed in the result would wrongly read
+ *        false whenever the actual render happened outside this function.
  * @param {number} [options.httpTimeoutMs]
  * @param {number} [options.hydrationMaxChars] Tier-2-specific — see extraction/llm.js's `maxChars`
  * @param {(step:string, detail?:object)=>void} [options.onStep]
@@ -133,7 +139,15 @@ async function autoExtract(url, schema, options = {}) {
         httpStatus = fetched.status;
     }
     let classification = classifyHtml(html, { status: httpStatus });
-    let browserUsed = false;
+    // Callers that pass pre-fetched HTML via options.html (e.g.
+    // crawl/crawlSite.js, which may already have rendered the page with a
+    // browser itself before handing it here) can say so via
+    // options.browserUsed — otherwise a browser render that happened before
+    // this function was ever called would be invisible to the returned
+    // provenance: browserUsed would wrongly read false even though a
+    // browser genuinely produced this HTML. This only seeds the flag; it
+    // still flips to true below if THIS call also ends up rendering.
+    let browserUsed = options.browserUsed === true;
     onStep('classified', classification);
 
     if (classification.needsBrowser) {
@@ -191,10 +205,25 @@ async function autoExtract(url, schema, options = {}) {
         const blocks = extractJsonLdBlocks(html);
         const relevant = jsonLdType ? findByType(blocks, jsonLdType) : findRelevantBlocks(blocks, schema);
         if (relevant.length > 0) {
-            onStep('extracted', { strategy: 'json-ld', count: relevant.length });
-            return finish('json-ld', relevant);
+            // Relevant JSON-LD isn't automatically USABLE JSON-LD — a block
+            // can match the schema's field names (or the exact @type) and
+            // still not carry every field the caller asked for (e.g. a
+            // Product block with name/price but no rating). Returning it
+            // anyway would silently answer a narrower question than the one
+            // asked, which contradicts "escalate only when the cheaper tier
+            // can't actually answer the request." Only short-circuit here if
+            // at least one item genuinely validates against the schema —
+            // otherwise fall through to the LLM-backed tiers below, same as
+            // the "present but irrelevant" case.
+            const jsonLdValidation = validateItems(relevant, schema);
+            if (jsonLdValidation.validItems > 0) {
+                onStep('extracted', { strategy: 'json-ld', count: relevant.length });
+                return finish('json-ld', relevant);
+            }
+            onStep('json-ld-invalid', { blocksFound: blocks.length, itemsFound: relevant.length });
+        } else {
+            onStep('json-ld-irrelevant', { blocksFound: blocks.length });
         }
-        onStep('json-ld-irrelevant', { blocksFound: blocks.length });
     }
 
     // Tier 2: known hydration-state object, handed to the LLM as structured
@@ -241,7 +270,7 @@ async function autoExtract(url, schema, options = {}) {
     }
 
     // Tier 3: no structured markup, no known hydration format — last resort,
-    // hand the LLM the page's visible text cold.
+    // hand the LLM the page's source text cold.
     onStep('extracting', { strategy: 'text' });
     const items = await extractWithRetryOnEmpty(() =>
         extractWithLLM(html, schema, {

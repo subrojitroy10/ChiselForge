@@ -46,7 +46,7 @@ doesn't cover (e.g. individual reviews) and you'll see the pipeline fall
 through past JSON-LD to the hydration-state tier, which does use an LLM:
 
 ```bash
-export NIM_API_KEY="your-key-here"   # see LLM.md for provider options
+export NIM_API_KEY="your-key-here"   # see llm-providers.md for provider options
 
 npx chiselforge extract \
   "https://www.zomato.com/mumbai/british-brewing-company-lower-parel/reviews" \
@@ -105,11 +105,10 @@ console.log(result.extraction.strategy);   // which tier answered
 
 ## Crawl a whole site
 
-`extract` handles one page. `crawl` discovers every same-origin page from a
-seed URL (sitemap.xml first, then a same-origin link crawl to fill in the
-rest) and runs each one through the same tiered pipeline — checkpointed and
-resumable, so re-running against the same `--output` dir skips pages already
-done.
+`extract` handles one page. `crawl` discovers every same-host page from a
+seed URL (sitemap.xml first, then a link crawl to fill in the rest) and runs
+each one through the same tiered pipeline — checkpointed, and resumable
+*if you ask for it*.
 
 ```bash
 chiselforge crawl https://example.com/ \
@@ -118,20 +117,39 @@ chiselforge crawl https://example.com/ \
   --output ./crawl-result
 ```
 
+`--output` controls where results are written — it is **not** the
+resumability key. By default, every `crawl` invocation gets its own unique
+checkpoint directory (a fresh temp dir), so re-running the same command with
+the same `--output` does not skip already-completed pages; it reprocesses
+everything and overwrites `--output` with a fresh run. To actually resume a
+crawl across separate invocations, pass the same `--checkpoint-dir`
+explicitly both times:
+
+```bash
+chiselforge crawl https://example.com/ --schema "title, description" \
+  --output ./crawl-result --checkpoint-dir ./crawl-result/.checkpoint
+# re-run later with the same --checkpoint-dir to resume, not restart
+```
+
+See [`architecture.md`](architecture.md)'s crawl section for why this is
+opt-in rather than automatic (a real bug — two unrelated invocations
+silently sharing state — is exactly why the default isn't a
+seed-derived/reused directory).
+
 Writes `crawl-result/index.json` (one line per page: URL, title, which tier
 answered, `llmUsed`, confidence, warnings) plus one JSON file per page under
 `crawl-result/pages/` containing the full result — schema-shaped structured
-data **and** the raw deterministic visible text (never LLM-paraphrased,
-captured regardless of which tier fires) so the corpus isn't solely
-dependent on how the LLM chose to summarize a page.
+data **and** the raw deterministic source text (HTML tags/scripts/styles
+stripped, never LLM-paraphrased, captured regardless of which tier fires) so
+the corpus isn't solely dependent on how the LLM chose to summarize a page.
 
 No site-specific code — the link discovery (`crawl/discover.js`) works the
-same way against any site. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for how
+same way against any site. See [`architecture.md`](architecture.md) for how
 this composes `core/worker-loop.js` (checkpointing/concurrency) with
 `autoExtract()` (per-page extraction).
 
 ## Next steps
 
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — how this is built, for extending it
-- [`EXTRACTION_STRATEGIES.md`](EXTRACTION_STRATEGIES.md) — tier details
-- [`LLM.md`](LLM.md) — using a different LLM provider
+- [`architecture.md`](architecture.md) — how this is built, for extending it
+- [`extraction-strategies.md`](extraction-strategies.md) — tier details
+- [`llm-providers.md`](llm-providers.md) — using a different LLM provider

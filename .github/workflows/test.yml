@@ -21,5 +21,5 @@ jobs:
       # playwright/undici are optional and only needed for the browser
       # transport / proxy support, neither of which the committed tests
       # exercise. benchmark/ is intentionally NOT run in CI — it costs real
-      # time/money against a live LLM API and live pages (see BENCHMARKS.md).
+      # time/money against a live LLM API and live pages (see docs/benchmarks.md).
       - run: npm test

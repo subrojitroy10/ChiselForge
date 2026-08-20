@@ -149,7 +149,7 @@ directly without a `renderWithBrowser` option.
 - **No infinite-scroll/lazy-load page** — `core/pagination.js`'s
   termination strategies are unit-tested (`test/pagination.test.js`) but
   not exercised against a real infinite-scroll page in this benchmark
-  (that's more naturally an adapter-level concern — see `ADAPTERS.md` —
+  (that's more naturally an adapter-level concern — see `adapters.md` —
   than something `autoExtract`'s single-page model handles).
 
 **Do not repeat unqualified claims like "X% of pages skip the LLM" from
@@ -166,9 +166,11 @@ present, and correctly used real browser rendering when required."*
 NIM_API_KEY=your-key node benchmark/run.js
 ```
 
-Requires `npm install` (pulls in `playwright` and `undici`, both optional
-dependencies of the base package) and `npx playwright install chromium` for
-the browser-rendering case. Not part of `npm test` — see `CONTRIBUTING.md`.
+Requires `npm install` (pulls in `playwright` and `undici` as
+`devDependencies` of this repo — not installed for downstream consumers of
+the published package, see the README's "Install" section) and
+`npx playwright install chromium` for the browser-rendering case. Not part
+of `npm test` — see `../CONTRIBUTING.md`.
 
 ## Expanding this corpus
 

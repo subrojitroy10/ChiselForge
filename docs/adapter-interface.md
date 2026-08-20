@@ -4,7 +4,7 @@ ChiselForge's engine (queue, checkpoint, rate limiter, proxy pool, logger,
 worker loop, both transports) has no knowledge of any specific website. An
 adapter is the piece that does. No production-derived reference adapters
 ship in this repo, and none are planned as a separate public package — see
-`ADAPTERS.md` for why. This document is the interface itself, meant to be
+`adapters.md` for why. This document is the interface itself, meant to be
 built on even though specific implementations of it aren't published here.
 
 There is no enforced base class or TypeScript interface yet (v0.1 is

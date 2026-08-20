@@ -1,0 +1,58 @@
+name: Bug report
+description: Something in the engine, CLI, or docs behaves incorrectly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: if this is about the LLM tier hanging or returning an
+        empty `[]`, check `docs/llm-providers.md`'s "Reliability notes" first —
+        it may be a known provider quirk, not a code bug.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected vs. what actually happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: >
+        The URL/schema/options you used (redact any API key), or a small
+        script. If you have `--verbose` CLI output or an `onStep` trail,
+        paste it — it shows exactly which tier ran and where it diverged.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: ChiselForge version
+      placeholder: "e.g. 0.1.0 (npm ls chiselforge)"
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      placeholder: "node --version"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (describe in "What happened")
+    validations:
+      required: true

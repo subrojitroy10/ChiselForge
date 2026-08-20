@@ -78,8 +78,18 @@ async function fetchHtml(url, options = {}) {
     };
 
     if (proxyUrl) {
-        // Lazy require — only pulled in when a proxy is actually used.
-        const { ProxyAgent } = require('undici');
+        // Lazy require — only pulled in when a proxy is actually used, so the
+        // core install stays light for users who never proxy requests.
+        let ProxyAgent;
+        try {
+            ({ ProxyAgent } = require('undici'));
+        } catch (err) {
+            throw new Error(
+                'Proxy support requires the optional "undici" dependency, which is not ' +
+                'installed. Run `npm install undici` (or reinstall without `--omit=optional`) ' +
+                'to use proxyUrl.'
+            );
+        }
         fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
     }
 

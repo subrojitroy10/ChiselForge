@@ -1,7 +1,7 @@
 # LLM tier configuration
 
 `extraction/llm.js` is used by tiers 2 and 3 of `autoExtract()` — see
-[`EXTRACTION_STRATEGIES.md`](EXTRACTION_STRATEGIES.md) for when each fires.
+[`extraction-strategies.md`](extraction-strategies.md) for when each fires.
 It's a thin wrapper around any OpenAI-compatible `/chat/completions`
 endpoint. Nothing about it is NVIDIA-specific by design, even though it
 defaults to NVIDIA NIM and was built/tested against it.
@@ -111,5 +111,5 @@ builds the system message: your schema (as a JSON example, with each field's
 description string), a hard instruction to return only a JSON array, and any
 `instructions` you pass. For the hydration tier specifically, `auto.js` adds
 a generic (non-site-specific) instruction to search nested structure before
-concluding nothing matches — see `EXTRACTION_STRATEGIES.md` for why that
+concluding nothing matches — see `extraction-strategies.md` for why that
 was necessary.

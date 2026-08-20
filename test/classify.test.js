@@ -49,5 +49,5 @@ test('plain SSR page with real content needs neither browser nor LLM tiers to be
     assert.equal(c.needsBrowser, false);
     assert.equal(c.hasJsonLd, false);
     assert.equal(c.hydration, null);
-    assert.ok(c.visibleTextLength > 200);
+    assert.ok(c.sourceTextLength > 200);
 });

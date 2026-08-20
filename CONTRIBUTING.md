@@ -2,7 +2,7 @@
 
 ## Before you start
 
-Read [`ARCHITECTURE.md`](ARCHITECTURE.md) — it explains why interfaces here
+Read [`docs/architecture.md`](docs/architecture.md) — it explains why interfaces here
 are minimal rather than heavily abstracted, and what's intentionally not
 built yet (see its "Roadmap" section). If you're about to add a
 `PageClassifier` class hierarchy or a pluggable `StrategySelector`, check
@@ -18,7 +18,7 @@ npm test
 All committed tests are fixture-based (`test/fixtures/*.html`) — no live
 network calls. If you're adding a test that needs a real page or a live LLM
 call, it belongs in `benchmark/`, not `test/` — see
-[`BENCHMARKS.md`](BENCHMARKS.md) for that distinction and why it matters.
+[`docs/benchmarks.md`](docs/benchmarks.md) for that distinction and why it matters.
 
 ## Adding a hydration-state format
 
@@ -31,12 +31,12 @@ shape) and add a fixture + test case in `test/fixtures/` +
 ## Adding an adapter
 
 Site-specific extraction logic (adapters) isn't published from this repo —
-see [`ADAPTERS.md`](ADAPTERS.md) for why and how to build your own against
-the public interface (`adapter-interface.md`).
+see [`docs/adapters.md`](docs/adapters.md) for why and how to build your own against
+the public interface (`docs/adapter-interface.md`).
 
 ## Reporting a bug in the LLM tier
 
-Before filing, check [`LLM.md`](LLM.md)'s "Reliability notes" — a request
+Before filing, check [`docs/llm-providers.md`](docs/llm-providers.md)'s "Reliability notes" — a request
 that hangs or returns an empty `[]` may be a known NIM key-scoping issue or
 temperature-0 non-determinism, not a code bug. If it's neither, include
 `--verbose` CLI output (or the `onStep` trail if using the JS API) so the
@@ -46,7 +46,7 @@ failing tier is clear.
 
 See the README's "What this is not" section — no hosted service, no
 billing, no accounts, no dashboard, no distributed queue (yet — see
-`ARCHITECTURE.md`'s roadmap for why that's deliberately deferred, not
+`docs/architecture.md`'s roadmap for why that's deliberately deferred, not
 rejected). Keep pull requests scoped to the engine and its documented
 extension points.
 

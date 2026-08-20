@@ -23,6 +23,6 @@ test('sameSitePage rejects non-page asset extensions', () => {
     assert.equal(sameSitePage('/data.json', 'https://example.com/', 'example.com'), null);
 });
 
-test('sameSitePage accepts a same-origin HTML-ish page', () => {
+test('sameSitePage accepts a same-host HTML-ish page', () => {
     assert.equal(sameSitePage('/about', 'https://example.com/', 'example.com'), 'https://example.com/about');
 });

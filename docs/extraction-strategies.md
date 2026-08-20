@@ -68,24 +68,25 @@ tokens, 120s timeout — tunable via `hydrationMaxChars`, `llmMaxTokens`,
 ## Tier 3 — Raw text (`extraction/llm.js`)
 
 No JSON-LD, no recognized hydration format — the last resort. The page's
-visible text (`extraction/html-to-text.js` strips scripts/styles/tags) is
-handed to the LLM cold, with your schema as the target shape.
+source text (`extraction/html-to-text.js` strips scripts/styles/tags — not
+a CSS-visibility computation) is handed to the LLM cold, with your schema
+as the target shape.
 
 **Be honest about this tier specifically:** it's where "extract anything
 from any website" claims stop being fully reliable. There's no structure to
 lean on — the LLM has to both find and format the data from scratch. Use it,
 but don't build anything that assumes it's as dependable as tiers 1-2. See
-[`BENCHMARKS.md`](BENCHMARKS.md) for measured tier-selection rates, not
+[`benchmarks.md`](benchmarks.md) for measured tier-selection rates, not
 estimates.
 
 ## Rendering classification (`extraction/classify.js`)
 
 Before any tier runs, `classifyHtml()` decides whether a browser is even
-needed — a heuristic check for an empty SPA shell (very little visible text
+needed — a heuristic check for an empty SPA shell (very little source text
 plus a bare `#root`/`#app`/`#__next` mount point with nothing inside).
 `autoExtract` does not launch a browser itself; if `needsBrowser` comes back
 true, it throws unless you supplied `options.renderWithBrowser`. See
-`ARCHITECTURE.md`'s "Why no built-in browser fallback."
+`architecture.md`'s "Why no built-in browser fallback."
 
 **Note on the returned `needsBrowser` vs. `browserUsed` fields, found while
 building the browser-rendering benchmark case:** after a browser render,
@@ -94,7 +95,7 @@ the final result usually comes back `false` (real content exists now),
 which correctly answers "would a fresh fetch of this URL need a browser,"
 but can't tell you whether a browser was actually used for *this*
 extraction. `extraction.browserUsed` is the separate field for that. See
-`BENCHMARKS.md` for the real case that surfaced this gap.
+`benchmarks.md` for the real case that surfaced this gap.
 
 ## Adding a new hydration-state format
 

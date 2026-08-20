@@ -1,29 +1,65 @@
 {
   "name": "chiselforge",
   "version": "0.1.0",
-  "description": "Extract structured data from webpages without writing a scraper. Deterministic extraction first (JSON-LD, hydration state) — LLM only when necessary. Plus a resumable multi-worker job-running engine underneath for serious scraping infrastructure.",
+  "description": "Deterministic-first structured web extraction for AI, search and data pipelines. URL + schema -> validated JSON, with LLM and browser escalation only when needed.",
   "main": "index.js",
+  "types": "types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "chiselforge": "cli.js"
   },
+  "files": [
+    "core/",
+    "crawl/",
+    "extraction/",
+    "transports/",
+    "types/",
+    "docs/",
+    "index.js",
+    "cli.js",
+    "proxies.example.txt",
+    "CHANGELOG.md"
+  ],
+  "author": "Subrojit Roy",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/subrojitroy10/ChiselForge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/subrojitroy10/ChiselForge/issues"
+  },
+  "homepage": "https://github.com/subrojitroy10/ChiselForge#readme",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "benchmark": "node benchmark/run.js"
   },
   "keywords": [
-    "scraper",
     "web-scraping",
-    "extraction",
+    "web-crawler",
+    "data-extraction",
     "structured-data",
     "json-ld",
     "llm",
+    "ai",
+    "data-pipeline",
+    "crawler",
+    "web-data",
+    "etl",
     "playwright",
-    "crawler"
+    "ai-agents",
+    "nodejs"
   ],
-  "optionalDependencies": {
+  "devDependencies": {
     "playwright": "^1.45.0",
     "undici": "^6.19.0"
   }

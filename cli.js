@@ -87,6 +87,8 @@ crawl options (all of the above, plus):
                                           browser process every 45 renders to release accumulated memory, instead of
                                           keeping one browser process alive for the whole run. Off by default — a
                                           normal small crawl doesn't need this, and restarting has a real time cost.
+  --ignore-robots                        Do not respect robots.txt Disallow/Allow rules during discovery. robots.txt
+                                          is respected by default (an explicit opt-out, not an opt-in).
 
 shared LLM options:
   --api-key <key>                      LLM API key (falls back to NIM_API_KEY env var)
@@ -211,12 +213,16 @@ async function runCrawl(args) {
     // Defaults to a unique dir per run (crawlSite's own default) — pass this
     // explicitly to opt into resuming a previous crawl instead.
     const checkpointDir = option('--checkpoint-dir', undefined);
+    // robots.txt is respected by default — see crawl/discover.js's
+    // discoverPages. This is an explicit opt-out, not an opt-in.
+    const respectRobots = !flag('--ignore-robots');
 
     console.log(`Crawling ${seed} (max ${maxPages} pages, ${workers} workers)...\n`);
 
     const onProgress = (event, detail) => {
         if (event === 'discovered') {
-            console.log(`Discovered ${detail.pageCount} page(s) — ${detail.sitemapPageCount} via sitemap, ${detail.crawledPageCount} via link crawl\n`);
+            console.log(`Discovered ${detail.pageCount} page(s) — ${detail.sitemapPageCount} via sitemap, ${detail.crawledPageCount} via link crawl` +
+                (detail.robotsDisallowedCount ? `, ${detail.robotsDisallowedCount} skipped (robots.txt)` : '') + '\n');
         } else if (event === 'page-done') {
             console.log(`  ✓ ${detail.url} — ${detail.strategy}${detail.llmUsed ? ' (LLM)' : ''}`);
         } else if (event === 'page-error') {
@@ -233,7 +239,7 @@ async function runCrawl(args) {
     let result;
     try {
         result = await crawlSite(seed, schema, {
-            maxPages, workers, onProgress, checkpointDir,
+            maxPages, workers, onProgress, checkpointDir, respectRobots,
             extractOptions: {
                 ...sharedLlmOptions(), jsonLdType,
                 renderWithBrowser: renderer.renderWithBrowser,
